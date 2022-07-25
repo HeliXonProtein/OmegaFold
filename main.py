@@ -15,7 +15,7 @@
 # limitations under the License.
 # =============================================================================
 """
-The main function to run the prediction process
+The main function to run the prediction
 """
 
 # =============================================================================
