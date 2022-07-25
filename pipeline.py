@@ -160,10 +160,7 @@ def fasta2inputs(
             p_msa[~p_msa_mask.bool()] = 21
             data.append({"p_msa": p_msa, "p_msa_mask": p_msa_mask})
 
-        yield (
-            utils.recursive_to(data, device=device),
-            out_fname
-        )
+        yield utils.recursive_to(data, device=device), out_fname
 
 
 def save_pdb(
@@ -188,7 +185,7 @@ def save_pdb(
         init_chain
 
     return:
-        the structure
+        the structure saved to ~save_path
 
     """
     builder = StructureBuilder.StructureBuilder()

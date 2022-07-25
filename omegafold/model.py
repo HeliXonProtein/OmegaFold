@@ -214,10 +214,7 @@ class OmegaFold(modules.OFModule):
 
         """
         edge_repr = self.input_embedder(fasta[..., 0, :])
-        node_plm, edge_plm = self.omega_plm(
-            fasta, mask, fwd_cfg=fwd_cfg
-        )
-        # return node_plm, edge_plm
+        node_plm, edge_plm = self.omega_plm(fasta, mask, fwd_cfg=fwd_cfg)
         node_repr = self.plm_node_embedder(utils.normalize(node_plm))
         edge_plm = edge_plm.permute(1, 2, 0)
         edge_repr += self.plm_edge_embedder(utils.normalize(edge_plm))
