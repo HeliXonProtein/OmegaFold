@@ -15,7 +15,7 @@
 # limitations under the License.
 # =============================================================================
 """
-The code for GeoFormer, the main trunck
+The code for GeoFormer, the main trunk
 """
 # =============================================================================
 # Imports
