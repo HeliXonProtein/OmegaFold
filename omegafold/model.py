@@ -154,18 +154,18 @@ class OmegaFold(modules.OFModule):
 
         """
         # Preparation before entering the cycles
-        primary_sequence = inputs[0]['msa'][..., 0, :]
+        primary_sequence = inputs[0]['p_msa'][..., 0, :]
         max_confidence = 0
         prev_dict = self.create_initial_prev_dict(len(primary_sequence))
         final_result = None
 
         # Start cycling
         for cycle_data in inputs:
-            msa, msa_mask = cycle_data['msa'], cycle_data['msa_mask']
-            fasta, mask = msa[..., 0, :], msa_mask[..., 0, :]
+            p_msa, p_msa_mask = cycle_data['p_msa'], cycle_data['p_msa_mask']
+            fasta, mask = p_msa[..., 0, :], p_msa_mask[..., 0, :]
             node_repr, edge_repr = self.deep_sequence_embed(
-                msa,
-                msa_mask,
+                p_msa,
+                p_msa_mask,
                 fwd_cfg
             )
             prev_dict['fasta'] = fasta
@@ -175,7 +175,7 @@ class OmegaFold(modules.OFModule):
 
             result, prev_dict = self.omega_fold_cycle(
                 fasta=fasta,
-                mask=msa_mask,
+                mask=p_msa_mask,
                 node_repr=node_repr,
                 edge_repr=edge_repr,
                 fwd_cfg=fwd_cfg
@@ -208,6 +208,7 @@ class OmegaFold(modules.OFModule):
         Args:
             fasta: the fasta sequence
             mask: the mask indicating the validity of the token
+            fwd_cfg:
 
         Returns:
 

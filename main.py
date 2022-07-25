@@ -70,7 +70,9 @@ def main():
             )
     ):
         logging.info(f"Predicting {i + 1}th chain in {args.input_file}")
-        logging.info(f"{len(input_data[0]['msa'][0])} residues in this chain.")
+        logging.info(
+            f"{len(input_data[0]['p_msa'][0])} residues in this chain."
+        )
         ts = time.time()
         try:
             output = model(
@@ -88,8 +90,8 @@ def main():
         pipeline.save_pdb(
             pos14=output['final_atom_positions'],
             b_factors=output['confidence'] * 100,
-            sequence=input_data[0]['msa'][0],
-            mask=input_data[0]['msa_mask'][0],
+            sequence=input_data[0]['p_msa'][0],
+            mask=input_data[0]['p_msa_mask'][0],
             save_path=save_path,
             model=0
         )

@@ -151,14 +151,14 @@ def fasta2inputs(
             g = torch.Generator()
             g.manual_seed(num_res)
         for _ in range(num_cycle):
-            msa = aatype[None, :].repeat(num_pseudo_msa, 1)
-            msa_mask = torch.rand(
+            p_msa = aatype[None, :].repeat(num_pseudo_msa, 1)
+            p_msa_mask = torch.rand(
                 [num_pseudo_msa, num_res], generator=g
             ).gt(mask_rate)
-            msa_mask = torch.cat((mask[None, :], msa_mask), dim=0)
-            msa = torch.cat((aatype[None, :], msa), dim=0)
-            msa[~msa_mask.bool()] = 21
-            data.append({"msa": msa, "msa_mask": msa_mask})
+            p_msa_mask = torch.cat((mask[None, :], p_msa_mask), dim=0)
+            p_msa = torch.cat((aatype[None, :], p_msa), dim=0)
+            p_msa[~p_msa_mask.bool()] = 21
+            data.append({"p_msa": p_msa, "p_msa_mask": p_msa_mask})
 
         yield (
             utils.recursive_to(data, device=device),
