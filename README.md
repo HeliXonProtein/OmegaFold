@@ -36,7 +36,7 @@ sequences.
 
 However, since we have implemented sharded execution, it is possible to
 
-1. trade computation time for GRAM: by chainging `--subbatch_size`. The
+1. trade computation time for GRAM: by changing `--subbatch_size`. The
    smaller
    this value is, the longer the execution can take, and the less memory is
    required, or,

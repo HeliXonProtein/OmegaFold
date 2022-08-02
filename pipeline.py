@@ -22,6 +22,7 @@ This file contains the utilities that we use for the entire inference pipeline
 # =============================================================================
 import argparse
 import collections
+import logging
 import ntpath
 import os
 import os.path
@@ -31,6 +32,7 @@ import typing
 from Bio import PDB as PDB
 from Bio.PDB import StructureBuilder
 import torch
+from torch import hub
 from torch.backends import cuda, cudnn
 from torch.utils.hipify import hipify_python
 
@@ -238,10 +240,14 @@ def _load_weights(
     """
 
     use_cache = os.path.exists(weights_file)
-    if not use_cache and weights_file is not None:
-        raise ValueError(f"{weights_file} not found")
-    if not weights_file and weights_url:
-        raise NotImplementedError(f"Please wait for the weights")
+    if weights_file and weights_url and not use_cache:
+        logging.info(
+            f"Downloading weights from {weights_url} to {weights_file}"
+        )
+        os.makedirs(os.path.dirname(weights_file), exist_ok=True)
+        hub.download_url_to_file(weights_url, weights_file)
+    else:
+        logging.info(f"Loading weights from {weights_file}")
 
     return torch.load(weights_file, map_location='cpu')
 
@@ -305,11 +311,15 @@ def get_args() -> typing.Tuple[
         help='The device on which the model will be running, default to cuda'
     )
     parser.add_argument(
-        '--weights_file', default=None, type=str,
+        '--weights_file',
+        default=os.path.expanduser("~/.cache/omegafold_ckpt/model.pt"),
+        type=str,
         help='The model cache to run'
     )
     parser.add_argument(
-        '--weights', default=None, type=str,
+        '--weights',
+        default="https://helixon.s3.amazonaws.com/release1.pt",
+        type=str,
         help='The url to the weights of the model'
     )
     parser.add_argument(
