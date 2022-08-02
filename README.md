@@ -5,7 +5,8 @@
 #### This is the first release for paper [High-resolution de novo structure prediction from primary sequence](https://www.biorxiv.org/content/10.1101/2022.07.21.500999v1).
 
 We will continue to optimize this repository for more ease of use, for
-instance, reducing the GRAM required to inference long proteins.
+instance, reducing the GRAM required to inference long proteins and 
+releasing possibly stronger models.
 
 ## Setup
 
