@@ -59,7 +59,7 @@ def _set_precision(allow_tf32: bool) -> None:
         cuda.matmul.allow_tf32 = allow_tf32
         cudnn.allow_tf32 = allow_tf32
     else:
-        precision = "highest" if allow_tf32 else "high"
+        precision = "high" if allow_tf32 else "highest"
         torch.set_float32_matmul_precision(precision)
 
 
