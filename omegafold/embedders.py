@@ -124,13 +124,13 @@ class EdgeEmbedder(modules.OFModule):
 
         self.proj_i = nn.Embedding(cfg.alphabet_size, cfg.edge_dim)
         self.proj_j = nn.Embedding(cfg.alphabet_size, cfg.edge_dim)
-        self.relpos_repr = RelPosEmbedder(cfg.relpos_len * 2 + 1, cfg.edge_dim)
+        self.relpos = RelPosEmbedder(cfg.relpos_len * 2 + 1, cfg.edge_dim)
 
     def forward(self, fasta_sequence: torch.Tensor) -> torch.Tensor:
         i = self.proj_i(fasta_sequence).unsqueeze(-2)
         j = self.proj_j(fasta_sequence).unsqueeze(-3)
         edge_repr = i + j
-        rel_pos = self.relpos_repr(fasta_sequence.size(-1))
+        rel_pos = self.relpos(fasta_sequence.size(-1))
         edge_repr += rel_pos
 
         return edge_repr
@@ -199,6 +199,11 @@ class RoPE(nn.Module):
 
 
 class RelPosEmbedder(nn.Embedding):
+    """
+        Compute the relative positional embedding, this is the same algorithm in
+        Jumper et al. (2021) Suppl. Alg. 4 "relpos"
+    """
+
     def forward(self, num_res: int) -> torch.Tensor:
         """
 

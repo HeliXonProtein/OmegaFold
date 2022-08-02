@@ -17,7 +17,6 @@
 """
 The main function to run the prediction
 """
-
 # =============================================================================
 # Imports
 # =============================================================================
@@ -34,9 +33,6 @@ import pipeline
 
 
 # =============================================================================
-# Constants
-# =============================================================================
-# =============================================================================
 # Functions
 # =============================================================================
 
@@ -47,7 +43,7 @@ def main():
     # create the output directory
     os.makedirs(args.output_dir, exist_ok=True)
     # get the model
-    logging.info(f'Constructing OmegaFold\n')
+    logging.info(f"Constructing OmegaFold")
     model = of.OmegaFold(of.make_config())
     if state_dict is None:
         logging.warning("Inferencing without loading weight")
@@ -88,10 +84,10 @@ def main():
 
         logging.info(f"Saving prediction to {save_path}")
         pipeline.save_pdb(
-            pos14=output['final_atom_positions'],
-            b_factors=output['confidence'] * 100,
-            sequence=input_data[0]['p_msa'][0],
-            mask=input_data[0]['p_msa_mask'][0],
+            pos14=output["final_atom_positions"],
+            b_factors=output["confidence"] * 100,
+            sequence=input_data[0]["p_msa"][0],
+            mask=input_data[0]["p_msa_mask"][0],
             save_path=save_path,
             model=0
         )
@@ -102,9 +98,6 @@ def main():
     logging.info("Done!")
 
 
-# =============================================================================
-# Classes
-# =============================================================================
 # =============================================================================
 # Tests
 # =============================================================================
