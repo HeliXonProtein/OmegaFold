@@ -2,7 +2,10 @@
 
 # OmegaFold: High-resolution de novo Structure Prediction from Primary Sequence
 
-#### This is a beta release for paper [High-resolution de novo structure prediction from primary sequence](https://www.biorxiv.org/content/10.1101/2022.07.21.500999v1), the weights and the final code will be released soon.
+#### This is the first release for paper [High-resolution de novo structure prediction from primary sequence](https://www.biorxiv.org/content/10.1101/2022.07.21.500999v1).
+
+We will continue to optimize this repository for more ease of use, for
+instance, reducing the GRAM required to inference long proteins.
 
 ## Setup
 
@@ -77,10 +80,6 @@ If this is helpful to you, please consider citing the paper with
 ```
 
 ## Note
-
-The weights of the model will be release soon, as well as some minor tweaks
-of the code to make it more efficient either in computation or in memory to
-make it as widely-available as possible.
 
 Also some of the comments might be out-of-date as of now, and will be
 updated very soon
