@@ -112,7 +112,7 @@ def fasta2inputs(
     for line in lines:
         if len(line) == 0:
             continue
-        if line.startswith(">"):
+        if line.startswith(">") or line .startswith(":"):
             name = True
             chain_ids.append(line.strip(">").strip("\n"))
         else:
