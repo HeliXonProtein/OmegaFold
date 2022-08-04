@@ -134,10 +134,23 @@ def fasta2inputs(
         output_dir = os.path.join(parent, folder_name)
         os.makedirs(output_dir, exist_ok=True)
     name_max = os.pathconf(output_dir, 'PC_NAME_MAX') - 4
+    
+    def chain_break(residue_index, lengths, offset=200):
+        '''Minkyung: add big enough number to residue index to indicate chain breaks'''
+        L_prev = 0
+        for L_i in lengths[:-1]:
+            idx_res[L_prev+L_i:] += offset
+            L_prev += L_i      
+        return residue_index
+
     for i, (ch, msa) in enumerate(combined):
-        lengths = [len(a) for a in fas.split(":")]
         
         if not real_msa: msa = [msa]
+        
+        fas = msa[0]
+        lengths = [len(a) for a in fas.split(":")]
+        residue_index = torch.arange(sum(lengths))
+        residue_index = chain_break(residue_index, lengths)
         
         aatypes = list()
         masks = list()
@@ -173,13 +186,14 @@ def fasta2inputs(
                 num_pseudo_msa = len(aatypes) - 1
             else:
                 p_msa = aatype[None, :].repeat(num_pseudo_msa, 1)
+                
             p_msa_mask = torch.rand(
                 [num_pseudo_msa, num_res], generator=g
             ).gt(mask_rate)
             p_msa_mask = torch.cat((mask[None, :], p_msa_mask), dim=0)
             p_msa = torch.cat((aatype[None, :], p_msa), dim=0)
             p_msa[~p_msa_mask.bool()] = 21
-            data.append({"p_msa": p_msa, "p_msa_mask": p_msa_mask})
+            data.append({"p_msa": p_msa, "p_msa_mask": p_msa_mask, "residue_index":residue_index})
 
         yield utils.recursive_to(data, device=device), out_fname
 
@@ -310,6 +324,7 @@ def get_args() -> typing.Tuple[
         rows of the input fasta file"
         """
     )
+    
     parser.add_argument(
         '--num_cycle', default=10, type=int,
         help="The number of cycles for optimization, default to 10"
@@ -352,6 +367,11 @@ def get_args() -> typing.Tuple[
     parser.add_argument(
         '--allow_tf32', default=True, type=hipify_python.str2bool,
         help='if allow tf32 for speed if available, default to True'
+    )
+
+    parser.add_argument(
+        '--real_msa', default=False, type=hipify_python.str2bool,
+        help='treat the input fasta as a real MSA file'
     )
 
     args = parser.parse_args()
