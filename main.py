@@ -63,6 +63,7 @@ def main():
                 device=args.device,
                 mask_rate=args.pseudo_msa_mask_rate,
                 num_cycle=args.num_cycle,
+                real_msa=args.real_msa,
             )
     ):
         logging.info(f"Predicting {i + 1}th chain in {args.input_file}")
