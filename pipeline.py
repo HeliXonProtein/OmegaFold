@@ -139,7 +139,7 @@ def fasta2inputs(
         '''Minkyung: add big enough number to residue index to indicate chain breaks'''
         L_prev = 0
         for L_i in lengths[:-1]:
-            idx_res[L_prev+L_i:] += offset
+            residue_index[L_prev+L_i:] += offset
             L_prev += L_i      
         return residue_index
 
