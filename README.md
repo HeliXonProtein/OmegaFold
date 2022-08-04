@@ -64,7 +64,7 @@ However, since we have implemented sharded execution, it is possible to
 For more information, run
 
 ```commandline
-python main.py --help
+omegafold --help
 ```
 
 where we provide several options for both speed and weights utilities.
