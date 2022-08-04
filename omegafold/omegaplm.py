@@ -68,7 +68,7 @@ class GatedAttentionUnit(modules.OFModule):
         self.multi_headed_scaling = modules.MultiHeadedScaling(
             cfg.attn_dim,
             num_heads=2,
-            on_out_ready=lambda x: self.rope(x, x.ndim - 3)
+            on_out_ready=lambda x,y: self.rope(x, x.ndim - 3, residue_index=y)
         )
         self.rope = embedders.RoPE(cfg.attn_dim)
         self.relpos = embedders.RelPosEmbedder(cfg.num_relpos, embedding_dim=1)
@@ -79,6 +79,7 @@ class GatedAttentionUnit(modules.OFModule):
             node: torch.Tensor,
             scaling: torch.Tensor,
             bias: torch.Tensor,
+            residue_index: torch.Tensor,
             fwd_cfg: typing.Optional[argparse.Namespace]
     ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -98,14 +99,14 @@ class GatedAttentionUnit(modules.OFModule):
         gates, values, base = self.gva_proj(node).split(
             [cfg.proj_dim, cfg.proj_dim, cfg.attn_dim], dim=-1
         )
-        queries, keys = self.multi_headed_scaling(base)
+        queries, keys = self.multi_headed_scaling(base, residue_index)
 
         node, edge = modules.attention(
             query=queries,
             key=keys,
             scale=scaling,
             value=values,
-            bias=bias + self.relpos(base.shape[-2])[..., 0],
+            bias=bias + self.relpos(residue_index)[..., 0],
             subbatch_size=fwd_cfg.subbatch_size
         )
 
@@ -134,6 +135,7 @@ class OmegaPLMLayer(modules.OFModule):
             node: torch.Tensor,
             qk_scaling: torch.Tensor,
             bias: torch.Tensor,
+            residue_index: torch.Tensor,
             fwd_cfg: typing.Optional[argparse.Namespace]
     ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         """Forward method for pre-layernorm
@@ -151,7 +153,7 @@ class OmegaPLMLayer(modules.OFModule):
 
         """
         shortcut, node = node, utils.normalize(node)
-        node, edge = self.gau(node, qk_scaling, bias, fwd_cfg)
+        node, edge = self.gau(node, qk_scaling, bias, residue_index, fwd_cfg)
         node = node + shortcut
         return node, edge
 
@@ -182,6 +184,7 @@ class OmegaPLM(modules.OFModule):
             self,
             tokens: torch.Tensor,
             mask: torch.Tensor,
+            residue_index: torch.Tensor,
             fwd_cfg: typing.Optional[argparse.Namespace]
     ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         """Forward method
@@ -204,7 +207,7 @@ class OmegaPLM(modules.OFModule):
         node = self._get_finetuning_scale(mask, tokens) * node
         edges = list()
         for layer in self.layers:
-            node, edge = layer(node, qk_scaling, bias, fwd_cfg)
+            node, edge = layer(node, qk_scaling, bias, residue_index, fwd_cfg)
             edges.append(edge)
         node = self.output_norm(node)
 

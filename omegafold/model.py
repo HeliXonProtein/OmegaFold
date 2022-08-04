@@ -162,10 +162,12 @@ class OmegaFold(modules.OFModule):
         # Start cycling
         for cycle_data in inputs:
             p_msa, p_msa_mask = cycle_data['p_msa'], cycle_data['p_msa_mask']
+            residue_index = cycle_data["residue_index"]
             fasta, mask = p_msa[..., 0, :], p_msa_mask[..., 0, :]
             node_repr, edge_repr = self.deep_sequence_embed(
                 p_msa,
                 p_msa_mask,
+                residue_index,
                 fwd_cfg
             )
             prev_dict['fasta'] = fasta
@@ -200,6 +202,7 @@ class OmegaFold(modules.OFModule):
             self,
             fasta: torch.Tensor,
             mask: torch.Tensor,
+            residue_index: torch.Tensor,
             fwd_cfg: typing.Optional[argparse.Namespace],
     ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -213,8 +216,9 @@ class OmegaFold(modules.OFModule):
         Returns:
 
         """
-        edge_repr = self.input_embedder(fasta[..., 0, :])
-        node_plm, edge_plm = self.omega_plm(fasta, mask, fwd_cfg=fwd_cfg)
+        edge_repr = self.input_embedder(fasta[..., 0, :], residue_index)
+        node_plm, edge_plm = self.omega_plm(fasta, mask, residue_index=residue_index,
+                                            fwd_cfg=fwd_cfg)
         node_repr = self.plm_node_embedder(utils.normalize(node_plm))
         edge_plm = edge_plm.permute(1, 2, 0)
         edge_repr += self.plm_edge_embedder(utils.normalize(edge_plm))

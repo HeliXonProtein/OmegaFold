@@ -36,33 +36,6 @@ from omegafold.utils import residue_constants as rc
 # =============================================================================
 # Functions
 # =============================================================================
-def _get_pos(
-        shape: torch.Size,
-        device: torch.device,
-        dtype: torch.dtype,
-        seq_dim: typing.Tuple[int, ...]
-) -> torch.Tensor:
-    """Get the position of the tokens given
-
-    Args:
-        shape: the shape of the tensor to be applied with RoPE
-        device: the device on which the tensor reside
-        dtype: the datatype of the tensor
-        seq_dim: dimensions of the tensor that reference the sequence length
-
-    Returns:
-        The position tensor of the shape from ~shape indexed by seq_dim
-
-    """
-    spatial_shape = [shape[i] for i in seq_dim]
-    total_len = 1
-    for i in spatial_shape:
-        total_len *= i
-    position = torch.arange(total_len, dtype=dtype, device=device)
-    position = position.reshape(*spatial_shape)
-
-    return position
-
 
 def _apply_embed(
         inputs: torch.Tensor,
@@ -126,11 +99,12 @@ class EdgeEmbedder(modules.OFModule):
         self.proj_j = nn.Embedding(cfg.alphabet_size, cfg.edge_dim)
         self.relpos = RelPosEmbedder(cfg.relpos_len * 2 + 1, cfg.edge_dim)
 
-    def forward(self, fasta_sequence: torch.Tensor) -> torch.Tensor:
+    def forward(self, fasta_sequence: torch.Tensor,
+                      residue_index: torch.Tensor) -> torch.Tensor:
         i = self.proj_i(fasta_sequence).unsqueeze(-2)
         j = self.proj_j(fasta_sequence).unsqueeze(-3)
         edge_repr = i + j
-        rel_pos = self.relpos(fasta_sequence.size(-1))
+        rel_pos = self.relpos(residue_index)
         edge_repr += rel_pos
 
         return edge_repr
@@ -161,7 +135,10 @@ class RoPE(nn.Module):
         )
 
     def forward(
-            self, tensor: torch.Tensor, seq_dim: typing.Union[int, tuple]
+            self,
+            tensor: torch.Tensor,
+            seq_dim: typing.Union[int, tuple],
+            residue_index: torch.Tensor,
     ) -> torch.Tensor:
         """
 
@@ -174,12 +151,15 @@ class RoPE(nn.Module):
         """
         if isinstance(seq_dim, int):
             seq_dim = [seq_dim, ]
-        sin, cos = self._compute_sin_cos(tensor, seq_dim)
+        sin, cos = self._compute_sin_cos(tensor, seq_dim, residue_index=residue_index)
 
         return _apply_embed(tensor, sin, cos, seq_dim)
 
     def _compute_sin_cos(
-            self, tensor: torch.Tensor, seq_dim: typing.Tuple[int]
+            self,
+            tensor: torch.Tensor,
+            seq_dim: typing.Tuple[int],
+            residue_index: torch.Tensor
     ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         """Compute sine and cosine tensors
 
@@ -192,7 +172,7 @@ class RoPE(nn.Module):
                 and the second one is the cosine tensor
 
         """
-        position = _get_pos(tensor.shape, tensor.device, tensor.dtype, seq_dim)
+        position = residue_index
         sinusoid = torch.einsum("..., d->...d", position, self.inv_freq)
         sin, cos = torch.sin(sinusoid), torch.cos(sinusoid)
         return sin, cos
@@ -204,7 +184,7 @@ class RelPosEmbedder(nn.Embedding):
         Jumper et al. (2021) Suppl. Alg. 4 "relpos"
     """
 
-    def forward(self, num_res: int) -> torch.Tensor:
+    def forward(self, residue_index: torch.Tensor) -> torch.Tensor:
         """
 
         Args:
@@ -213,7 +193,7 @@ class RelPosEmbedder(nn.Embedding):
         Returns:
 
         """
-        idx = torch.arange(num_res, device=next(self.parameters()).device)
+        idx = residue_index
         one_side = self.num_embeddings // 2
         idx = (idx[None, :] - idx[:, None]).clamp(-one_side, one_side)
         idx = idx + one_side
