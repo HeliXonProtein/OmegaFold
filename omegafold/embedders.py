@@ -36,33 +36,6 @@ from omegafold.utils import residue_constants as rc
 # =============================================================================
 # Functions
 # =============================================================================
-def _get_pos(
-        shape: torch.Size,
-        device: torch.device,
-        dtype: torch.dtype,
-        seq_dim: typing.Tuple[int, ...]
-) -> torch.Tensor:
-    """Get the position of the tokens given
-
-    Args:
-        shape: the shape of the tensor to be applied with RoPE
-        device: the device on which the tensor reside
-        dtype: the datatype of the tensor
-        seq_dim: dimensions of the tensor that reference the sequence length
-
-    Returns:
-        The position tensor of the shape from ~shape indexed by seq_dim
-
-    """
-    spatial_shape = [shape[i] for i in seq_dim]
-    total_len = 1
-    for i in spatial_shape:
-        total_len *= i
-    position = torch.arange(total_len, dtype=dtype, device=device)
-    position = position.reshape(*spatial_shape)
-
-    return position
-
 
 def _apply_embed(
         inputs: torch.Tensor,
@@ -162,7 +135,10 @@ class RoPE(nn.Module):
         )
 
     def forward(
-            self, tensor: torch.Tensor, seq_dim: typing.Union[int, tuple]
+            self,
+            tensor: torch.Tensor,
+            seq_dim: typing.Union[int, tuple],
+            residue_index: torch.Tensor,
     ) -> torch.Tensor:
         """
 
@@ -175,12 +151,15 @@ class RoPE(nn.Module):
         """
         if isinstance(seq_dim, int):
             seq_dim = [seq_dim, ]
-        sin, cos = self._compute_sin_cos(tensor, seq_dim)
+        sin, cos = self._compute_sin_cos(tensor, seq_dim, residue_index=residue_index)
 
         return _apply_embed(tensor, sin, cos, seq_dim)
 
     def _compute_sin_cos(
-            self, tensor: torch.Tensor, seq_dim: typing.Tuple[int]
+            self,
+            tensor: torch.Tensor,
+            seq_dim: typing.Tuple[int],
+            residue_index: torch.Tensor
     ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         """Compute sine and cosine tensors
 
@@ -193,7 +172,7 @@ class RoPE(nn.Module):
                 and the second one is the cosine tensor
 
         """
-        position = _get_pos(tensor.shape, tensor.device, tensor.dtype, seq_dim)
+        position = residue_index
         sinusoid = torch.einsum("..., d->...d", position, self.inv_freq)
         sin, cos = torch.sin(sinusoid), torch.cos(sinusoid)
         return sin, cos

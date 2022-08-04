@@ -68,7 +68,7 @@ class GatedAttentionUnit(modules.OFModule):
         self.multi_headed_scaling = modules.MultiHeadedScaling(
             cfg.attn_dim,
             num_heads=2,
-            on_out_ready=lambda x: self.rope(x, x.ndim - 3)
+            on_out_ready=lambda x,y: self.rope(x, x.ndim - 3, residue_index=y)
         )
         self.rope = embedders.RoPE(cfg.attn_dim)
         self.relpos = embedders.RelPosEmbedder(cfg.num_relpos, embedding_dim=1)
@@ -99,7 +99,7 @@ class GatedAttentionUnit(modules.OFModule):
         gates, values, base = self.gva_proj(node).split(
             [cfg.proj_dim, cfg.proj_dim, cfg.attn_dim], dim=-1
         )
-        queries, keys = self.multi_headed_scaling(base)
+        queries, keys = self.multi_headed_scaling(base, residue_index)
 
         node, edge = modules.attention(
             query=queries,
