@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
+from __future__ import annotations
 """
 This file contains the utilities that we use for the entire inference pipeline
 """
@@ -105,7 +106,8 @@ def fasta2inputs(
     Returns:
 
     """
-    chain_ids, aastr = list(), list()
+    chain_ids: list[str] = []
+    aastr: list[str] = []
     with open(fasta_path, 'r') as file:
         lines = file.readlines()
     name = False
@@ -129,7 +131,12 @@ def fasta2inputs(
         folder_name = path_leaf(fasta_path).split(".")[0]
         output_dir = os.path.join(parent, folder_name)
         os.makedirs(output_dir, exist_ok=True)
-    name_max = os.pathconf(output_dir, 'PC_NAME_MAX') - 4
+    
+    try:
+        name_max = os.pathconf(output_dir, 'PC_NAME_MAX') - 4
+    except AttributeError:
+        # os.pathconf is UNIX specific. Set to 32 for now.
+        name_max = 32
 
     for i, (ch, fas) in enumerate(combined):
         fas = fas.replace("Z", "E").replace("B", "D").replace("U", "C")
