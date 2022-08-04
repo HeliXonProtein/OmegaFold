@@ -63,7 +63,6 @@ def main():
                 device=args.device,
                 mask_rate=args.pseudo_msa_mask_rate,
                 num_cycle=args.num_cycle,
-                lengths=args.lengths,
             )
     ):
         logging.info(f"Predicting {i + 1}th chain in {args.input_file}")
@@ -91,7 +90,6 @@ def main():
             mask=input_data[0]["p_msa_mask"][0],
             save_path=save_path,
             model=0,
-            lengths=args.lengths,
         )
         logging.info(f"Saved")
         del output
