@@ -28,6 +28,7 @@ import os
 import os.path
 import pathlib
 import typing
+import string
 
 from Bio import PDB as PDB
 from Bio.PDB import StructureBuilder
@@ -110,6 +111,9 @@ def fasta2inputs(
     with open(fasta_path, 'r') as file:
         lines = file.readlines()
     name = False
+
+    #remove lowercase letters for a3m inputs
+    rm_lc = str.maketrans('','',string.ascii_lowercase)
     for line in lines:
         if len(line) == 0:
             continue
@@ -118,10 +122,10 @@ def fasta2inputs(
             chain_ids.append(line.strip(">").strip("\n"))
         else:
             if name:
-                aastr.append(line.strip("\n").upper())
+                aastr.append(line.strip("\n").translate(rm_lc))
                 name = False
             else:
-                aastr[-1] = aastr[-1] + line.strip("\n").upper()
+                aastr[-1] = aastr[-1] + line.strip("\n").translate(rm_lc)
     if real_msa:
         combined = [[chain_ids[0], aastr]]
     else:
@@ -148,14 +152,14 @@ def fasta2inputs(
         if not real_msa: msa = [msa]
         
         fas = msa[0]
-        lengths = [len(a) for a in fas.split(":")]
+        lengths = [len(a) for a in fas.replace("/",":").split(":")]
         residue_index = torch.arange(sum(lengths))
         residue_index = chain_break(residue_index, lengths)
         
         aatypes = list()
         masks = list()
         for fas in msa:
-            fas = fas.replace(":","")
+            fas = fas.replace("/","").replace(":","")
             fas = fas.replace("Z", "E").replace("B", "D").replace("U", "C")
             aatype = torch.LongTensor(
                 [rc.restypes_with_x.index(aa) if aa != '-' else 21 for aa in fas]
