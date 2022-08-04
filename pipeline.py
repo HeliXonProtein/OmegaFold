@@ -87,7 +87,8 @@ def fasta2inputs(
         device: typing.Optional[torch.device] = torch.device('cpu'),
         mask_rate: float = 0.12,
         num_cycle: int = 10,
-        deterministic: bool = True
+        deterministic: bool = True,
+        real_msa: bool = False,
 ) -> typing.Generator[
     typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor, str], None, None]:
     """
@@ -121,25 +122,39 @@ def fasta2inputs(
                 name = False
             else:
                 aastr[-1] = aastr[-1] + line.strip("\n").upper()
-    combined = sorted(
-        list(zip(chain_ids, aastr)), key=lambda x: len(x[1])
-    )
+    if real_msa:
+        combined = [chain_ids[0], aastr]
+    else:
+        combined = sorted(
+            list(zip(chain_ids, aastr)), key=lambda x: len(x[1])
+        )
     if output_dir is None:
         parent = pathlib.Path(fasta_path).parent
         folder_name = path_leaf(fasta_path).split(".")[0]
         output_dir = os.path.join(parent, folder_name)
         os.makedirs(output_dir, exist_ok=True)
     name_max = os.pathconf(output_dir, 'PC_NAME_MAX') - 4
-
-    for i, (ch, fas) in enumerate(combined):
-        fas = fas.replace("Z", "E").replace("B", "D").replace("U", "C")
-        aatype = torch.LongTensor(
-            [rc.restypes_with_x.index(aa) if aa != '-' else 21 for aa in fas]
-        )
+    for i, (ch, msa) in enumerate(combined):
+        lengths = [len(a) for a in fas.split(":")]
+        
+        if not real_msa: msa = [msa]
+        
+        aatypes = list()
+        masks = list()
+        for fas in msa:
+            fas = fas.replace(":","")
+            fas = fas.replace("Z", "E").replace("B", "D").replace("U", "C")
+            aatype = torch.LongTensor(
+                [rc.restypes_with_x.index(aa) if aa != '-' else 21 for aa in fas]
+            )
+            assert torch.all(aatype.ge(0)) and torch.all(aatype.le(21)), \
+                f"Only take 0-20 amino acids as inputs with unknown amino acid " \
+                f"indexed as 20"
+            aatypes.append(aatype)
+        
+        aatype = aatypes[0]
         mask = torch.ones_like(aatype).float()
-        assert torch.all(aatype.ge(0)) and torch.all(aatype.le(21)), \
-            f"Only take 0-20 amino acids as inputs with unknown amino acid " \
-            f"indexed as 20"
+        
         if len(ch) < name_max:
             out_fname = ch.replace(os.path.sep, "-")
         else:
@@ -153,7 +168,11 @@ def fasta2inputs(
             g = torch.Generator()
             g.manual_seed(num_res)
         for _ in range(num_cycle):
-            p_msa = aatype[None, :].repeat(num_pseudo_msa, 1)
+            if real_msa:
+                p_msa = torch.stack(aatypes)
+                num_pseudo_msa = len(aatypes) - 1
+            else:
+                p_msa = aatype[None, :].repeat(num_pseudo_msa, 1)
             p_msa_mask = torch.rand(
                 [num_pseudo_msa, num_res], generator=g
             ).gt(mask_rate)
