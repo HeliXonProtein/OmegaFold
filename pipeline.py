@@ -123,7 +123,7 @@ def fasta2inputs(
             else:
                 aastr[-1] = aastr[-1] + line.strip("\n").upper()
     if real_msa:
-        combined = [chain_ids[0], aastr]
+        combined = [[chain_ids[0], aastr]]
     else:
         combined = sorted(
             list(zip(chain_ids, aastr)), key=lambda x: len(x[1])
@@ -182,7 +182,7 @@ def fasta2inputs(
             g.manual_seed(num_res)
         for _ in range(num_cycle):
             if real_msa:
-                p_msa = torch.stack(aatypes)
+                p_msa = torch.stack(aatypes[1:])
                 num_pseudo_msa = len(aatypes) - 1
             else:
                 p_msa = aatype[None, :].repeat(num_pseudo_msa, 1)
