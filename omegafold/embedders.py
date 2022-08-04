@@ -126,11 +126,12 @@ class EdgeEmbedder(modules.OFModule):
         self.proj_j = nn.Embedding(cfg.alphabet_size, cfg.edge_dim)
         self.relpos = RelPosEmbedder(cfg.relpos_len * 2 + 1, cfg.edge_dim)
 
-    def forward(self, fasta_sequence: torch.Tensor) -> torch.Tensor:
+    def forward(self, fasta_sequence: torch.Tensor,
+                      residue_index: torch.Tensor) -> torch.Tensor:
         i = self.proj_i(fasta_sequence).unsqueeze(-2)
         j = self.proj_j(fasta_sequence).unsqueeze(-3)
         edge_repr = i + j
-        rel_pos = self.relpos(fasta_sequence.size(-1))
+        rel_pos = self.relpos(residue_index)
         edge_repr += rel_pos
 
         return edge_repr
@@ -204,7 +205,7 @@ class RelPosEmbedder(nn.Embedding):
         Jumper et al. (2021) Suppl. Alg. 4 "relpos"
     """
 
-    def forward(self, num_res: int) -> torch.Tensor:
+    def forward(self, residue_index: torch.Tensor) -> torch.Tensor:
         """
 
         Args:
@@ -213,7 +214,7 @@ class RelPosEmbedder(nn.Embedding):
         Returns:
 
         """
-        idx = torch.arange(num_res, device=next(self.parameters()).device)
+        idx = residue_index
         one_side = self.num_embeddings // 2
         idx = (idx[None, :] - idx[:, None]).clamp(-one_side, one_side)
         idx = idx + one_side

@@ -87,7 +87,8 @@ def fasta2inputs(
         device: typing.Optional[torch.device] = torch.device('cpu'),
         mask_rate: float = 0.12,
         num_cycle: int = 10,
-        deterministic: bool = True
+        deterministic: bool = True,
+        real_msa: bool = False,
 ) -> typing.Generator[
     typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor, str], None, None]:
     """
@@ -121,25 +122,52 @@ def fasta2inputs(
                 name = False
             else:
                 aastr[-1] = aastr[-1] + line.strip("\n").upper()
-    combined = sorted(
-        list(zip(chain_ids, aastr)), key=lambda x: len(x[1])
-    )
+    if real_msa:
+        combined = [[chain_ids[0], aastr]]
+    else:
+        combined = sorted(
+            list(zip(chain_ids, aastr)), key=lambda x: len(x[1])
+        )
     if output_dir is None:
         parent = pathlib.Path(fasta_path).parent
         folder_name = path_leaf(fasta_path).split(".")[0]
         output_dir = os.path.join(parent, folder_name)
         os.makedirs(output_dir, exist_ok=True)
     name_max = os.pathconf(output_dir, 'PC_NAME_MAX') - 4
+    
+    def chain_break(residue_index, lengths, offset=200):
+        '''Minkyung: add big enough number to residue index to indicate chain breaks'''
+        L_prev = 0
+        for L_i in lengths[:-1]:
+            residue_index[L_prev+L_i:] += offset
+            L_prev += L_i      
+        return residue_index
 
-    for i, (ch, fas) in enumerate(combined):
-        fas = fas.replace("Z", "E").replace("B", "D").replace("U", "C")
-        aatype = torch.LongTensor(
-            [rc.restypes_with_x.index(aa) if aa != '-' else 21 for aa in fas]
-        )
+    for i, (ch, msa) in enumerate(combined):
+        
+        if not real_msa: msa = [msa]
+        
+        fas = msa[0]
+        lengths = [len(a) for a in fas.split(":")]
+        residue_index = torch.arange(sum(lengths))
+        residue_index = chain_break(residue_index, lengths)
+        
+        aatypes = list()
+        masks = list()
+        for fas in msa:
+            fas = fas.replace(":","")
+            fas = fas.replace("Z", "E").replace("B", "D").replace("U", "C")
+            aatype = torch.LongTensor(
+                [rc.restypes_with_x.index(aa) if aa != '-' else 21 for aa in fas]
+            )
+            assert torch.all(aatype.ge(0)) and torch.all(aatype.le(21)), \
+                f"Only take 0-20 amino acids as inputs with unknown amino acid " \
+                f"indexed as 20"
+            aatypes.append(aatype)
+        
+        aatype = aatypes[0]
         mask = torch.ones_like(aatype).float()
-        assert torch.all(aatype.ge(0)) and torch.all(aatype.le(21)), \
-            f"Only take 0-20 amino acids as inputs with unknown amino acid " \
-            f"indexed as 20"
+        
         if len(ch) < name_max:
             out_fname = ch.replace(os.path.sep, "-")
         else:
@@ -153,14 +181,19 @@ def fasta2inputs(
             g = torch.Generator()
             g.manual_seed(num_res)
         for _ in range(num_cycle):
-            p_msa = aatype[None, :].repeat(num_pseudo_msa, 1)
+            if real_msa:
+                p_msa = torch.stack(aatypes[1:])
+                num_pseudo_msa = len(aatypes) - 1
+            else:
+                p_msa = aatype[None, :].repeat(num_pseudo_msa, 1)
+                
             p_msa_mask = torch.rand(
                 [num_pseudo_msa, num_res], generator=g
             ).gt(mask_rate)
             p_msa_mask = torch.cat((mask[None, :], p_msa_mask), dim=0)
             p_msa = torch.cat((aatype[None, :], p_msa), dim=0)
             p_msa[~p_msa_mask.bool()] = 21
-            data.append({"p_msa": p_msa, "p_msa_mask": p_msa_mask})
+            data.append({"p_msa": p_msa, "p_msa_mask": p_msa_mask, "residue_index":residue_index})
 
         yield utils.recursive_to(data, device=device), out_fname
 
@@ -291,6 +324,7 @@ def get_args() -> typing.Tuple[
         rows of the input fasta file"
         """
     )
+    
     parser.add_argument(
         '--num_cycle', default=10, type=int,
         help="The number of cycles for optimization, default to 10"
@@ -333,6 +367,11 @@ def get_args() -> typing.Tuple[
     parser.add_argument(
         '--allow_tf32', default=True, type=hipify_python.str2bool,
         help='if allow tf32 for speed if available, default to True'
+    )
+
+    parser.add_argument(
+        '--real_msa', default=False, type=hipify_python.str2bool,
+        help='treat the input fasta as a real MSA file'
     )
 
     args = parser.parse_args()
