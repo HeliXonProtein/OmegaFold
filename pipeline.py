@@ -126,6 +126,7 @@ def fasta2inputs(
                 name = False
             else:
                 aastr[-1] = aastr[-1] + line.strip("\n").translate(rm_lc)
+
     if real_msa:
         combined = [[chain_ids[0], aastr]]
     else:
@@ -160,6 +161,7 @@ def fasta2inputs(
         masks = list()
         for fas in msa:
             fas = fas.replace("/","").replace(":","")
+
             fas = fas.replace("Z", "E").replace("B", "D").replace("U", "C")
             aatype = torch.LongTensor(
                 [rc.restypes_with_x.index(aa) if aa != '-' else 21 for aa in fas]
