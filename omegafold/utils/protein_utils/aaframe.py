@@ -210,9 +210,8 @@ class AAFrame(object):
             value: the translation value
 
         """
-        self._translation = value.masked_fill(
-            ~self.mask.unsqueeze(-1).expand_as(value), 0
-        )
+        m = f.bit_wise_not(self.mask.unsqueeze(-1).expand_as(value))
+        self._translation = value.masked_fill(m, 0)
 
     @property
     def rotation(self) -> torch.Tensor:
@@ -234,10 +233,10 @@ class AAFrame(object):
             value: the rotational matrices
 
         """
-        mask = ~self.mask.unsqueeze(-1).unsqueeze(-1).expand_as(value)
-        value = value.masked_fill(mask, 0)
+        mask = f.bit_wise_not(self.mask[..., None, None].expand_as(value))
+        value = value.masked_fill(mask, 0.)
         value = value.masked_fill(
-            mask * torch.eye(3, device=mask.device, dtype=torch.bool), 1
+            mask * torch.eye(3, dtype=torch.bool).to(mask.device), 1
         )
         self._rotation = value
 
@@ -783,7 +782,7 @@ class AAFrame(object):
 
         # make extra backbone frames
         # This follows the order of ~restypes
-        m = rc.restype_aa_default_frame[fasta].to(self.device)
+        m = rc.restype_aa_default_frame[fasta.cpu()].to(self.device)
         default_frames = AAFrame.from_4x4(
             m, torsion_angles_mask, unit="Angstrom"
         )
@@ -861,17 +860,18 @@ class AAFrame(object):
 
         assert self._unit == "Angstrom"
 
-        residx2group = rc.restype_atom14_to_aa.to(self.device)
+        fasta = fasta.cpu()
+        residx2group = rc.restype_atom14_to_aa
         residx2group = residx2group[..., :pos_counts]
-        residx2group = residx2group[fasta]
+        residx2group = residx2group[fasta].to(self.device)
         group_mask = F.one_hot(residx2group, num_classes=8)
         group_mask = group_mask[..., :num_classes]
         group_mask = group_mask * frame.mask[..., None, :]
         to_mask = frame.unsqueeze(-2) * group_mask
         map_atoms_to_global = to_mask.sum(-1)
-        lit_pos = rc.restype_atom14_aa_positions.to(self.device)
+        lit_pos = rc.restype_atom14_aa_positions
         lit_pos = lit_pos[..., :pos_counts, :]
-        lit_pos = lit_pos[fasta]
+        lit_pos = lit_pos[fasta].to(self.device)
         pred_pos = map_atoms_to_global.transform(lit_pos)
         # mask = c.restype_atom14_mask[sequence]  # (N, 14)
         # mask |= self.mask[..., None]
