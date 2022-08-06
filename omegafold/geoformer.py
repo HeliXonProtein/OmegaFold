@@ -106,13 +106,13 @@ class GeoFormerBlock(modules.OFModule):
 
         """
         node_repr += self.attention_w_edge_bias(node_repr, edge_repr, mask)
-        node_repr_col = utils.normalize(node_repr.transpose(-2, -3))
-        node_repr_col, _ = self.column_attention(
-            node_repr_col,
-            node_repr_col,
+        node_col = utils.normalize(node_repr.transpose(-2, -3).contiguous())
+        node_col, _ = self.column_attention(
+            node_col,
+            node_col,
             bias=utils.mask2bias(mask.T[..., None, None, :])
         )
-        node_repr += node_repr_col.transpose(-2, -3)
+        node_repr += node_col.transpose(-2, -3)
         node_repr += self.node_transition(
             node_repr, subbatch_size=fwd_cfg.subbatch_size
         )

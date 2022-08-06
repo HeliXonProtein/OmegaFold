@@ -23,20 +23,29 @@ This script contains some functions that may be handy somewhere
 # =============================================================================
 # Imports
 # =============================================================================
-import functools
-from typing import Union
+import typing
 
 import torch
-from torch import linalg as LA
+
 
 # =============================================================================
 # Functions
 # =============================================================================
-get_norm = functools.partial(LA.norm, ord=2, dim=-1)
+def get_norm(x: torch.Tensor) -> torch.Tensor:
+    """
+    Replacement for LA.norm since MPS does not support it yet.
+
+    Args:
+        x:
+
+    Returns:
+
+    """
+    return x.norm(p=2, dim=-1)
 
 
 def robust_normalize(
-        x: torch.Tensor, dim: int = -1, p: Union[int, str] = 2
+        x: torch.Tensor, dim: int = -1, p: typing.Union[int, str] = 2
 ) -> torch.Tensor:
     """
     Normalization with a constant small term on the denominator
@@ -50,10 +59,7 @@ def robust_normalize(
         the normalized result
 
     """
-    return x / (LA.norm(x, ord=p, dim=dim, keepdim=True).clamp(4e-5))
-
-
-norm_l2 = functools.partial(LA.norm, ord=2, dim=-1)
+    return x / (x.norm(p=p, dim=dim, keepdim=True).clamp(4e-5))
 
 
 def quaternion_to_matrix(quaternions: torch.Tensor) -> torch.Tensor:
@@ -137,6 +143,12 @@ def create_pseudo_beta(
         atom_pos[..., 4, :], atom_pos[..., 1, :]
     )
     return pseudo_beta
+
+
+def bit_wise_not(boolean_tensor: torch.Tensor) -> torch.Tensor:
+    """For MPS devices that have no support for yet bit-wise not"""
+    boolean_tensor = 1 - boolean_tensor.float()
+    return boolean_tensor.bool()
 
 
 # =============================================================================

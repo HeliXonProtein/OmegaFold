@@ -237,11 +237,6 @@ class OmegaFold(modules.OFModule):
             [num_res, 14, 3],
             device=self.device, dtype=torch.float
         )
-        prev_x_rot = torch.zeros(
-            [num_res, 8, 9],
-            device=self.device, dtype=torch.float
-        )
-        prev_x_rot[..., [0, 4, ]] = 1
 
         return {
             "prev_node": torch.zeros(
