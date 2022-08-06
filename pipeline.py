@@ -27,6 +27,7 @@ import ntpath
 import os
 import os.path
 import pathlib
+import sys
 import typing
 
 from Bio import PDB as PDB
@@ -112,9 +113,9 @@ def fasta2inputs(
     for line in lines:
         if len(line) == 0:
             continue
-        if line.startswith(">") or line .startswith(":"):
+        if line.startswith(">") or line.startswith(":"):
             name = True
-            chain_ids.append(line.strip(">").strip("\n"))
+            chain_ids.append(line[1:].strip("\n"))
         else:
             if name:
                 aastr.append(line.strip("\n").upper())
@@ -129,7 +130,10 @@ def fasta2inputs(
         folder_name = path_leaf(fasta_path).split(".")[0]
         output_dir = os.path.join(parent, folder_name)
         os.makedirs(output_dir, exist_ok=True)
-    name_max = os.pathconf(output_dir, 'PC_NAME_MAX') - 4
+    if sys.path == 'win32':
+        name_max = 100
+    else:
+        name_max = os.pathconf(output_dir, 'PC_NAME_MAX') - 4
 
     for i, (ch, fas) in enumerate(combined):
         fas = fas.replace("Z", "E").replace("B", "D").replace("U", "C")
