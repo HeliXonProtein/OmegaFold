@@ -549,7 +549,7 @@ class GeometricAttention(OFModule):
         ab = torch.einsum(
             '...ikrd,...jkrd->...ijrd',
             *act.split([self.d_edge, self.d_edge], dim=-1)
-        )
+        ).contiguous()
         ab = utils.normalize(ab)
         ab = torch.einsum(
             '...rd,rdc->...rc', ab, self.out_proj_w

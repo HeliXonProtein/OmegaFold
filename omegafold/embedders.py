@@ -257,7 +257,7 @@ class RecycleEmbedder(modules.OFModule):
         Returns:
 
         """
-        atom_mask = rc.restype2atom_mask[fasta].to(self.device)
+        atom_mask = rc.restype2atom_mask[fasta.cpu()].to(self.device)
         prev_beta = utils.create_pseudo_beta(prev_x, atom_mask)
         d = utils.get_norm(prev_beta.unsqueeze(-2) - prev_beta.unsqueeze(-3))
         d = self.dgram(d)

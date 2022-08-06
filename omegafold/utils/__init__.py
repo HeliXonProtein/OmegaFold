@@ -27,9 +27,9 @@ import torch
 from omegafold.utils.protein_utils import residue_constants
 from omegafold.utils.protein_utils.aaframe import AAFrame
 from omegafold.utils.protein_utils.functions import (
+    bit_wise_not,
     create_pseudo_beta,
     get_norm,
-    norm_l2,
     robust_normalize,
 )
 from omegafold.utils.torch_utils import (
