@@ -12,7 +12,17 @@ releasing possibly stronger models.
 
 To prepare the environment to run OmegaFold,
 
+- from source
+
 ```commandline
+pip install git+https://github.com/HeliXonProtein/OmegaFold.git
+```
+
+- clone the repository
+
+```commandline
+git clone https://github.com/HeliXonProtein/OmegaFold
+cd OmegaFold
 pip install -r requirements.txt
 ```
 
@@ -28,7 +38,7 @@ yourself.
 There should be only one way to use the model:
 
 ```commandline
-python main.py INPUT_FILE.fasta OUTPUT_DIRECTORY
+omegafold INPUT_FILE.fasta OUTPUT_DIRECTORY
 ```
 
 And voila!
@@ -54,7 +64,7 @@ However, since we have implemented sharded execution, it is possible to
 For more information, run
 
 ```commandline
-python main.py --help
+omegafold --help
 ```
 
 where we provide several options for both speed and weights utilities.

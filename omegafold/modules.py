@@ -40,7 +40,7 @@ def softmax(
         x: torch.Tensor,
         dim: int,
         *,
-        dtype: typing.Optional = None,
+        dtype: typing.Optional[torch.dtype] = None,
         in_place: bool = False
 ) -> torch.Tensor:
     """
