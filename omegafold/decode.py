@@ -131,7 +131,8 @@ class InvariantPointAttention(modules.OFModule):
 
         # Combine them and take the softmax
         logits = scalar_logits + edge_logits - point_logits
-        logits = torch.masked_fill(logits, ~frames.mask[None, ..., None], -1e8)
+        m = utils.bit_wise_not(frames.mask[None, ..., None])
+        logits = torch.masked_fill(logits, m, -1e8)
         attn_w = torch.softmax(logits, dim=-2)  # (num_res, num_res, n_head)
 
         # get the output
