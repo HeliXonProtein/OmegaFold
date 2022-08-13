@@ -35,11 +35,16 @@ from Bio import PDB as PDB
 from Bio.PDB import StructureBuilder
 import torch
 from torch import hub
-from torch.backends import cuda, cudnn, mps
+from torch.backends import cuda, cudnn
 from torch.utils.hipify import hipify_python
 
 from omegafold import utils
 from omegafold.utils.protein_utils import residue_constants as rc
+
+try:
+    from torch.backends import mps  # Compatibility with earlier versions
+except IndexError:
+    mps = None
 
 
 # =============================================================================

@@ -126,7 +126,7 @@ class GeoFormerBlock(modules.OFModule):
         return node_repr, edge_repr
 
     def _column_attention(self, node_repr, mask, fwd_cfg):
-        node_repr_col = utils.normalize(node_repr.transpose(-2, -3))
+        node_repr_col = utils.normalize(node_repr.transpose(-2, -3).contiguous())
         node_repr_col = self.column_attention(
             node_repr_col,
             node_repr_col,
