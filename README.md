@@ -2,11 +2,19 @@
 
 # OmegaFold: High-resolution de novo Structure Prediction from Primary Sequence
 
-#### This is the first release for paper [High-resolution de novo structure prediction from primary sequence](https://www.biorxiv.org/content/10.1101/2022.07.21.500999v1).
+#### This is the release code for paper [High-resolution de novo structure prediction from primary sequence](https://www.biorxiv.org/content/10.1101/2022.07.21.500999v1).
 
 We will continue to optimize this repository for more ease of use, for
 instance, reducing the GRAM required to inference long proteins and
 releasing possibly stronger models.
+
+## Update Notes
+
+We have optimized (to some extent) the GRAM usage of OmegaFold model in our
+latest release. Now the model can inference protein sequence as long as
+_4096_ on NVIDIA A100 Graphics card with 80 GB of memory with
+`--subbatch_size` set to 128 without hitting 70 GB of memory.
+This version's model is more sensitive to `--subbatch_size`.
 
 ## Setup
 
@@ -23,25 +31,10 @@ pip install git+https://github.com/HeliXonProtein/OmegaFold.git
 ```commandline
 git clone https://github.com/HeliXonProtein/OmegaFold
 cd OmegaFold
-pip install -r requirements.txt
+python setup.py install
 ```
 
 should get you where you want.
-Even if this failed, since we use minimal 3rd party libraries, you can
-always just install the latest
-[PyTorch](https://pytorch.org) and [biopython](https://biopython.org)
-(and that's it!)
-yourself.
-
-## Running
-
-There should be only one way to use the model:
-
-```commandline
-omegafold INPUT_FILE.fasta OUTPUT_DIRECTORY
-```
-
-And voila!
 
 The `INPUT_FILE.fasta` should be a normal fasta file with possibly many
 sequences with a comment line starting with `>` or `:` above the amino
@@ -51,6 +44,30 @@ This command will download the weight
 from https://helixon.s3.amazonaws.com/release1.pt
 to `~/.cache/omegafold_ckpt/model.pt`
 and load the model
+
+## Running
+
+You could simply
+
+```commandline
+omegafold INPUT_FILE.fasta OUTPUT_DIRECTORY
+```
+
+And voila!
+
+### Alternatively
+
+Even if this failed, since we use minimal 3rd party libraries, you can
+always just install the latest
+[PyTorch](https://pytorch.org) and [biopython](https://biopython.org)
+(and that's it!) yourself.
+In this case, you could run
+
+```commandline
+python main.py INPUT_FILE.fasta OUTPUT_DIRECTORY
+```
+
+### Notes on resources
 
 However, since we have implemented sharded execution, it is possible to
 
