@@ -72,7 +72,10 @@ def _attention(
         scale: torch.Tensor,
         value: torch.Tensor,
         bias: torch.Tensor,
-) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+        return_edge: bool,
+        edge_reduction: str,
+        edge_reduction_dim: int
+) -> typing.Tuple[torch.Tensor, typing.Optional[torch.Tensor]]:
     """Normal attention
 
     Args:
@@ -81,15 +84,21 @@ def _attention(
         scale: the scaling of logits
         value: tensor of shape (*_k, dim_v)
         bias: the bias acting as either mask or relative positional encoding
+        return_edge: if to return the logits of attention
 
     Returns:
         The aggregated tensor of shape (*_q, dim_v)
 
     """
     logits = torch.einsum("...id, ...jd -> ...ij", query * scale, key)
-    attn = softmax(logits + bias, dim=-1, in_place=True)
+    logits.add_(bias)
+    attn = softmax(logits, dim=-1, in_place=not return_edge)
     out = torch.einsum("...ij, ...jd -> ...id", attn, value)
-    return out, attn
+    if return_edge:
+        attn = getattr(attn, edge_reduction)(dim=edge_reduction_dim)
+        return out, attn
+    else:
+        return out, None
 
 
 def attention(
@@ -98,8 +107,12 @@ def attention(
         scale: typing.Union[torch.Tensor, float],
         value: torch.Tensor,
         bias: torch.Tensor,
-        subbatch_size: typing.Optional[int] = None
-) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+        subbatch_size: typing.Optional[int] = None,
+        *,
+        return_edge: bool = False,
+        edge_reduction: str = 'sum',
+        edge_reduction_dim: int = 0,
+) -> typing.Tuple[torch.Tensor, typing.Tuple[torch.Tensor]]:
     """Computes attention with q, k , v
 
     Args:
@@ -109,6 +122,9 @@ def attention(
         value: tensor of shape (*_k, dim_v)
         bias: the bias acting as either mask or relative positional encoding
         subbatch_size: the subbatch size to split the computation into
+        return_edge: if to return the logits
+        edge_reduction:
+        edge_reduction_dim:
 
     Returns:
         The aggregated tensor of shape (*_q, dim_v)
@@ -117,12 +133,18 @@ def attention(
     q_length, k_length, v_dim = query.shape[-2], key.shape[-2], value.shape[-1]
     subbatch_size = subbatch_size or q_length
 
-    batch_shape = query.shape[:-2]
+    batch_shape = list(query.shape[:-2])
     factory_kwargs = nn.factory_kwargs(
         {"device": query.device, "dtype": query.dtype}
     )
     output = torch.empty(*batch_shape, q_length, v_dim, **factory_kwargs)
-    logits = torch.empty(*batch_shape, q_length, k_length, **factory_kwargs)
+    if return_edge:
+        batch_shape.pop(edge_reduction_dim + 2)
+        attns = torch.empty(
+            *batch_shape, q_length, k_length, **factory_kwargs
+        )
+    else:
+        attns = None
 
     for i, q_i in enumerate(query.split(subbatch_size, dim=-2)):
         start, end = i * subbatch_size, (i + 1) * subbatch_size,
@@ -131,11 +153,15 @@ def attention(
         else:
             b_i = bias[..., start:end, :]
 
-        res, attn = _attention(q_i, key, scale, value, b_i)
+        res, attn = _attention(
+            q_i, key, scale, value, b_i, return_edge,
+            edge_reduction, edge_reduction_dim
+        )
         output[..., start:end, :] = res
-        logits[..., start:end, :] = attn
+        if return_edge:
+            attns[..., start:end, :] = attn
 
-    return output, logits
+    return output, attns
 
 
 # =============================================================================
@@ -402,6 +428,17 @@ class Attention(OFModule):
             if bias is not None:
                 bias = bias.unsqueeze(-4)
 
+        attn_out = self._get_attn_out(q_inputs, kv_inputs, fwd_cfg, bias)
+
+        output = torch.einsum('...rhqc,rhco->...qor', attn_out, self.o_weights)
+        output += self.o_bias
+
+        if to_unsqueeze:
+            output = output.squeeze(-1)
+        return output
+
+    def _get_attn_out(self, q_inputs, kv_inputs, fwd_cfg, bias):
+
         qg = torch.einsum('...qar,arhc->...rhqc', q_inputs, self.qg_weights)
         qg += self.qg_bias
         q_out = qg.split(self.c, dim=-1)
@@ -415,7 +452,7 @@ class Attention(OFModule):
         subbatch_size = (
             q.shape[-4] if fwd_cfg is None else fwd_cfg.subbatch_size
         )
-        attn_out, logits = attention(
+        attn_out, _ = attention(
             query=q,
             key=k,
             value=v,
@@ -423,19 +460,12 @@ class Attention(OFModule):
             bias=bias,
             scale=self.c ** (-0.5)
         )
-
         # get the gating
         if self.gating:
             g = torch.sigmoid(q_out[1])
             attn_out *= g
 
-        output = torch.einsum('...rhqc,rhco->...qor', attn_out, self.o_weights)
-        output += self.o_bias
-
-        if to_unsqueeze:
-            output, logits = output.squeeze(-1), logits.squeeze(-4)
-        return output, logits[..., None].transpose(-1, -4).squeeze(-4)
-
+        return attn_out
 
 class AttentionWEdgeBias(OFModule):
     def __init__(
@@ -484,9 +514,9 @@ class AttentionWEdgeBias(OFModule):
         # check dim
         edge_bias = self.proj_edge_bias(edge_repr).permute(2, 0, 1)
 
-        bias = edge_bias + utils.mask2bias(mask[..., None, None, :])
-        attn_out, _ = self.attention(
-            node_repr, node_repr, bias=bias, fwd_cfg=fwd_cfg
+        edge_bias = edge_bias + utils.mask2bias(mask[..., None, None, :])
+        attn_out = self.attention(
+            node_repr, node_repr, bias=edge_bias, fwd_cfg=fwd_cfg
         )
         return attn_out
 
@@ -495,6 +525,8 @@ class GeometricAttention(OFModule):
     def __init__(self, d_edge: int, c: int, n_head: int, n_axis: int) -> None:
         super(GeometricAttention, self).__init__(None)
         self.d_edge = d_edge
+        self.n_axis = n_axis
+        self.n_head = n_head
         self.linear_b_weights = nn.Parameter(
             torch.empty([d_edge, n_axis, n_head])
         )
@@ -523,41 +555,113 @@ class GeometricAttention(OFModule):
             n_axis=n_axis
         )
 
+    def _get_attended(self, edge_repr, mask, fwd_cfg):
+        attended = torch.empty(
+            *edge_repr.shape, self.n_axis,
+            dtype=edge_repr.dtype,
+            device=edge_repr.device
+        )
+        b = torch.zeros(
+            self.n_axis, self.n_head, *edge_repr.shape[:2],
+            dtype=edge_repr.dtype,
+            device=edge_repr.device
+        )
+        b += utils.mask2bias(mask)
+        for s, e, edge_r in self._get_sharded_stacked(
+                edge_repr, subbatch_size=fwd_cfg.subbatch_size
+        ):
+            b[..., s:e, :] = torch.einsum(
+                '...qkcr,crh->...rhqk', edge_r, self.linear_b_weights
+            ) + self.linear_b_bias
+        for s, e, edge_r in self._get_sharded_stacked(
+                edge_repr, subbatch_size=fwd_cfg.subbatch_size
+        ):
+            attended[s:e] = self.attention(
+                edge_r, edge_r, b, fwd_cfg=fwd_cfg
+            )
+        return attended[..., 0] + attended[..., 1].transpose(-2, -3)
+
+    def _get_pair_sharded(self, edge_repr, subbatch_size):
+        for s_row, e_row, edge_row in self._get_sharded_stacked(
+                edge_repr, subbatch_size=subbatch_size
+        ):
+            for s_col, e_col, edge_col, in self._get_sharded_stacked(
+                    edge_repr, subbatch_size=subbatch_size
+            ):
+                yield (s_row, e_row, edge_row), (s_col, e_col, edge_col)
+
+    def _get_sharded_stacked(self, edge_repr, subbatch_size):
+        idx = 0
+        start, end = 0, subbatch_size
+        while start < edge_repr.shape[-2]:
+            yield start, end, torch.stack(
+                [
+                    edge_repr[start:end],
+                    edge_repr.transpose(-2, -3)[start:end]
+                ], dim=-1
+            )
+            idx += 1
+            start, end = idx * subbatch_size, (idx + 1) * subbatch_size
+
+    def _get_gated(self, edge_repr, mask, fwd_cfg):
+        gated = torch.empty(
+            *edge_repr.shape[:2],
+            self.n_axis,
+            self.d_edge,
+            device=edge_repr.device,
+            dtype=edge_repr.dtype
+        )
+        for s_row, e_row, edge_row in self._get_sharded_stacked(
+                edge_repr, subbatch_size=fwd_cfg.subbatch_size
+        ):
+            act_row = self._get_act_row(edge_row, mask[s_row:e_row])
+            act_g = torch.sigmoid(
+                torch.einsum(
+                    '...dr,drc->...rc',
+                    edge_row,
+                    self.act_w[..., -self.d_edge:]
+                ) + self.act_b[..., -self.d_edge:]
+            )
+            for s_col, e_col, edge_col, in self._get_sharded_stacked(
+                    edge_repr, subbatch_size=fwd_cfg.subbatch_size
+            ):
+                act_col = self._get_act_col(edge_col, mask[s_col:e_col])
+                ab = torch.einsum('...ikrd,...jkrd->...ijrd', act_row, act_col)
+                ab = utils.normalize(ab)
+                gated[s_row:e_row, s_col:e_col] = torch.einsum(
+                    '...rd,rdc->...rc', ab, self.out_proj_w
+                )
+                gated[s_row:e_row, s_col:e_col].add_(self.out_proj_b)
+                gated[s_row:e_row, s_col:e_col] *= act_g[:, s_col:e_col]
+
+        return gated.sum(-2)
+
+    def _get_sliced_weight(self, weight, shift=0):
+        w = weight[..., :-self.d_edge].unflatten(-1, sizes=(4, -1))
+        w = w[..., shift::2, :]
+        w = w.flatten(start_dim=-2)
+        return w
+
+    def _get_act_row(self, edge_row: torch.Tensor, mask: torch.Tensor):
+        w = self._get_sliced_weight(self.act_w)
+        b = self._get_sliced_weight(self.act_b)
+        act = torch.einsum('...dr,drc->...rc', edge_row, w) + b
+        act = self.glu(act) * mask[..., None, None, None]
+        return act
+
+    def _get_act_col(self, edge_row: torch.Tensor, mask: torch.Tensor):
+        w = self._get_sliced_weight(self.act_w, shift=1)
+        b = self._get_sliced_weight(self.act_b, shift=1)
+        act = torch.einsum('...dr,drc->...rc', edge_row, w) + b
+        act = self.glu(act) * mask[..., None, None, None]
+        return act
+
     def forward(
-            self, edge_repr: torch.Tensor, mask: torch.Tensor
+            self, edge_repr: torch.Tensor, mask: torch.Tensor, fwd_cfg
     ) -> torch.Tensor:
         edge_repr = utils.normalize(edge_repr)
-        edge_stacked = torch.stack(
-            [edge_repr, edge_repr.transpose(-2, -3)], dim=-1
-        )  # B, L, L, D, R
-
-        b = torch.einsum(
-            '...qkcr,crh->...rhqk', edge_stacked, self.linear_b_weights
-        ) + self.linear_b_bias
-        b += utils.mask2bias(mask[..., None, None, None, :])
-        attended, _ = self.attention(edge_stacked, edge_stacked, b)
-
-        act = torch.einsum(
-            '...dr,drc->...rc', edge_stacked, self.act_w
-        ) + self.act_b
-        act, g = act.split([self.d_edge * 4, self.d_edge], dim=-1)
-
-        act = self.glu(act)
-        edge_mask = mask[None, ...] * mask[..., None]
-        act *= edge_mask[..., None, None]
-
-        ab = torch.einsum(
-            '...ikrd,...jkrd->...ijrd',
-            *act.split([self.d_edge, self.d_edge], dim=-1)
-        ).contiguous()
-        ab = utils.normalize(ab)
-        ab = torch.einsum(
-            '...rd,rdc->...rc', ab, self.out_proj_w
-        ) + self.out_proj_b
-        gated = ab * g.sigmoid()
-
-        out = gated[..., 0, :] + gated[..., 1, :] + (
-                attended[..., 0] + attended[..., 1].transpose(-2, -3))
+        out = self._get_attended(edge_repr, mask, fwd_cfg)
+        out += self._get_gated(edge_repr, mask, fwd_cfg)
 
         return out
 

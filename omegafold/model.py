@@ -132,8 +132,6 @@ class OmegaFold(modules.OFModule):
 
     def forward(
             self,
-            # fasta: torch.Tensor,
-            # mask: torch.Tensor,
             inputs: _INPUTS,
             predict_with_confidence: typing.Optional[bool] = True,
             *,
@@ -145,12 +143,9 @@ class OmegaFold(modules.OFModule):
         Args:
             inputs:
             predict_with_confidence: if to choose with confidence
-            fwd_cfg: the configuration for this forward run
-                containing just subbatch_size currently
+            fwd_cfg: forward configuration
 
         Returns:
-            A dictionary containing the position, the mask of the atoms in
-            atom14 format, per-residue confidence, and overall confidence
 
         """
         # Preparation before entering the cycles
@@ -168,10 +163,14 @@ class OmegaFold(modules.OFModule):
                 p_msa_mask,
                 fwd_cfg
             )
-            prev_dict['fasta'] = fasta
-            node_recycle, edge_recycle = self.recycle_embedder(**prev_dict)
-            node_repr[..., 0, :, :] = node_repr[..., 0, :, :] + node_recycle
-            edge_repr = edge_repr + edge_recycle
+            node_recycle, edge_repr = self.recycle_embedder(
+                fasta=fasta,
+                prev_node=prev_dict.pop('prev_node'),
+                prev_edge=prev_dict.pop('prev_edge'),
+                prev_x=prev_dict.pop('prev_x'),
+                node_repr=node_repr,
+                edge_repr=edge_repr,
+            )
 
             result, prev_dict = self.omega_fold_cycle(
                 fasta=fasta,
@@ -208,16 +207,22 @@ class OmegaFold(modules.OFModule):
         Args:
             fasta: the fasta sequence
             mask: the mask indicating the validity of the token
-            fwd_cfg:
 
         Returns:
 
         """
-        edge_repr = self.input_embedder(fasta[..., 0, :])
-        node_plm, edge_plm = self.omega_plm(fasta, mask, fwd_cfg=fwd_cfg)
-        node_repr = self.plm_node_embedder(utils.normalize(node_plm))
-        edge_plm = edge_plm.permute(1, 2, 0)
-        edge_repr += self.plm_edge_embedder(utils.normalize(edge_plm))
+        node_repr, edge_repr = self.omega_plm(
+            fasta, mask, fwd_cfg=fwd_cfg
+        )
+        # return node_plm, edge_plm
+        node_repr = self.plm_node_embedder(
+            utils.normalize(node_repr, in_place=True)
+        )
+        edge_repr = edge_repr.permute(1, 2, 0)
+        edge_repr = self.plm_edge_embedder(
+            utils.normalize(edge_repr, in_place=True)
+        )
+        edge_repr = self.input_embedder(fasta[..., 0, :], out=edge_repr)
 
         return node_repr, edge_repr
 

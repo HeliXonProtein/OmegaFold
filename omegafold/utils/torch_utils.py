@@ -46,22 +46,21 @@ def mask2bias(mask: torch.Tensor, *, inf: float = 1e9) -> torch.Tensor:
     Returns:
 
     """
-    return mask.sub(1).mul(inf)
+    return mask.float().sub(1).mul(inf)
 
 
 def normalize(
         inputs: torch.Tensor,
         normalized_shape: typing.Optional[
-            typing.Union[int, typing.List[int], torch.Size]] = None
+            typing.Union[int, typing.List[int], torch.Size]] = None,
+        in_place: bool = False
 ) -> torch.Tensor:
     """Layer normalization without a module (and weight)
-
-    This is mostly used for layer normalization that is placed directly before
-    a linear operation
 
     Args:
         inputs: the input tensor to be normalized
         normalized_shape: the normalized_shape for normalization
+        in_place:
 
     Returns:
 
@@ -71,7 +70,14 @@ def normalize(
     if isinstance(normalized_shape, numbers.Integral):
         normalized_shape = (normalized_shape,)
 
-    return F.layer_norm(inputs, normalized_shape, None, None, 1e-5)
+    if in_place:
+        dim = list(range(len(inputs.shape))[-len(normalized_shape):])
+        inputs -= inputs.mean(dim=dim, keepdim=True)
+        inputs *= torch.rsqrt(inputs.var(dim=dim, keepdim=True) + 1e-5)
+        return inputs
+    # F.layer_norm seems a bit faster
+    else:
+        return F.layer_norm(inputs, normalized_shape, None, None, 1e-5)
 
 
 def masked_mean(
