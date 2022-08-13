@@ -522,6 +522,24 @@ class AttentionWEdgeBias(OFModule):
         return attn_out
 
 
+def _get_sharded_stacked(
+        edge_repr: torch.Tensor,
+        subbatch_size: int
+):
+    subbatch_size = subbatch_size or edge_repr.shape[-2]
+    idx = 0
+    start, end = 0, subbatch_size
+    while start < edge_repr.shape[-2]:
+        yield start, end, torch.stack(
+            [
+                edge_repr[start:end],
+                edge_repr.transpose(-2, -3)[start:end]
+            ], dim=-1
+        )
+        idx += 1
+        start, end = idx * subbatch_size, (idx + 1) * subbatch_size
+
+
 class GeometricAttention(OFModule):
     """We have a lot of stuff here for GRAM reduction
 
@@ -577,36 +595,19 @@ class GeometricAttention(OFModule):
             device=edge_repr.device
         )
         b += utils.mask2bias(mask)
-        for s, e, edge_r in self._get_sharded_stacked(
+        for s, e, edge_r in _get_sharded_stacked(
                 edge_repr, subbatch_size=fwd_cfg.subbatch_size
         ):
             b[..., s:e, :] = torch.einsum(
                 '...qkcr,crh->...rhqk', edge_r, self.linear_b_weights
             ) + self.linear_b_bias
-        for s, e, edge_r in self._get_sharded_stacked(
+        for s, e, edge_r in _get_sharded_stacked(
                 edge_repr, subbatch_size=fwd_cfg.subbatch_size
         ):
             attended[s:e] = self.attention(
                 edge_r, edge_r, b, fwd_cfg=fwd_cfg
             )
         return attended[..., 0] + attended[..., 1].transpose(-2, -3)
-
-    def _get_sharded_stacked(
-            self,
-            edge_repr: torch.Tensor,
-            subbatch_size: int
-    ):
-        idx = 0
-        start, end = 0, subbatch_size
-        while start < edge_repr.shape[-2]:
-            yield start, end, torch.stack(
-                [
-                    edge_repr[start:end],
-                    edge_repr.transpose(-2, -3)[start:end]
-                ], dim=-1
-            )
-            idx += 1
-            start, end = idx * subbatch_size, (idx + 1) * subbatch_size
 
     def _get_gated(self, edge_repr: torch.Tensor, mask: torch.Tensor, fwd_cfg):
         gated = torch.empty(
@@ -616,7 +617,7 @@ class GeometricAttention(OFModule):
             device=edge_repr.device,
             dtype=edge_repr.dtype
         )
-        for s_row, e_row, edge_row in self._get_sharded_stacked(
+        for s_row, e_row, edge_row in _get_sharded_stacked(
                 edge_repr, subbatch_size=fwd_cfg.subbatch_size
         ):
             act_row = self._get_act_row(edge_row, mask[s_row:e_row])
@@ -627,7 +628,7 @@ class GeometricAttention(OFModule):
                     self.act_w[..., -self.d_edge:]
                 ) + self.act_b[..., -self.d_edge:]
             )
-            for s_col, e_col, edge_col, in self._get_sharded_stacked(
+            for s_col, e_col, edge_col, in _get_sharded_stacked(
                     edge_repr, subbatch_size=fwd_cfg.subbatch_size
             ):
                 act_col = self._get_act_col(edge_col, mask[s_col:e_col])

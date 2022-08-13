@@ -14,13 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
-from __future__ import annotations
 """
 This file contains the utilities that we use for the entire inference pipeline
 """
 # =============================================================================
 # Imports
 # =============================================================================
+from __future__ import annotations
+
 import argparse
 import collections
 import logging
@@ -28,14 +29,13 @@ import ntpath
 import os
 import os.path
 import pathlib
-import sys
 import typing
 
 from Bio import PDB as PDB
 from Bio.PDB import StructureBuilder
 import torch
 from torch import hub
-from torch.backends import cuda, cudnn
+from torch.backends import cuda, cudnn, mps
 from torch.utils.hipify import hipify_python
 
 from omegafold import utils
@@ -259,6 +259,39 @@ def _load_weights(
     return torch.load(weights_file, map_location='cpu')
 
 
+def _get_device(device) -> str:
+    """
+    Infer the accelerator
+
+    Args:
+        device: the device type
+
+    Returns:
+
+    """
+    if device is None:
+        if torch.cuda.is_available():
+            return "cuda"
+        elif mps.is_available():
+            return "mps"
+        else:
+            return 'cpu'
+    elif device == 'cpu':
+        return device
+    elif device.startswith('cuda'):
+        if torch.cuda.is_available():
+            return device
+        else:
+            raise ValueError(f"Device cuda is not available")
+    elif device == "mps":
+        if mps.is_available():
+            return device
+        else:
+            raise ValueError(f"Device mps is not available")
+    else:
+        raise ValueError(f"Device type {device} is not available")
+
+
 def get_args() -> typing.Tuple[
     argparse.Namespace, collections.OrderedDict, argparse.Namespace]:
     """
@@ -314,8 +347,10 @@ def get_args() -> typing.Tuple[
         """
     )
     parser.add_argument(
-        '--device', default='cuda', type=str,
-        help='The device on which the model will be running, default to cuda'
+        '--device', default=None, type=str,
+        help=
+        'The device on which the model will be running, '
+        'default to the accelerator that we can find'
     )
     parser.add_argument(
         '--weights_file',
@@ -359,6 +394,8 @@ def get_args() -> typing.Tuple[
         subbatch_size=args.subbatch_size,
         num_recycle=args.num_cycle,
     )
+
+    args.device = _get_device(args.device)
 
     return args, weights, forward_config
 
