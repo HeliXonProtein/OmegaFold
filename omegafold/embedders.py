@@ -247,7 +247,7 @@ class RecycleEmbedder(modules.OFModule):
             node_repr: torch.Tensor,
             edge_repr: torch.Tensor,
     ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
-        """
+        """Recycle the last run
 
         Args:
             fasta:
@@ -257,8 +257,8 @@ class RecycleEmbedder(modules.OFModule):
                 of shape [num_res, num_res, edge_repr_dim]
             prev_x: pseudo beta coordinates from the previous cycle.
                 of shape [num_res, 3]
-            node_repr:
-            edge_repr:
+            node_repr: the node representation to put stuff in
+            edge_repr: the edge representation to put stuff in
 
         Returns:
 

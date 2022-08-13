@@ -467,6 +467,7 @@ class Attention(OFModule):
 
         return attn_out
 
+
 class AttentionWEdgeBias(OFModule):
     def __init__(
             self,
@@ -522,6 +523,10 @@ class AttentionWEdgeBias(OFModule):
 
 
 class GeometricAttention(OFModule):
+    """We have a lot of stuff here for GRAM reduction
+
+    """
+
     def __init__(self, d_edge: int, c: int, n_head: int, n_axis: int) -> None:
         super(GeometricAttention, self).__init__(None)
         self.d_edge = d_edge
@@ -555,7 +560,12 @@ class GeometricAttention(OFModule):
             n_axis=n_axis
         )
 
-    def _get_attended(self, edge_repr, mask, fwd_cfg):
+    def _get_attended(
+            self,
+            edge_repr: torch.Tensor,
+            mask: torch.Tensor,
+            fwd_cfg
+    ) -> torch.Tensor:
         attended = torch.empty(
             *edge_repr.shape, self.n_axis,
             dtype=edge_repr.dtype,
@@ -581,16 +591,11 @@ class GeometricAttention(OFModule):
             )
         return attended[..., 0] + attended[..., 1].transpose(-2, -3)
 
-    def _get_pair_sharded(self, edge_repr, subbatch_size):
-        for s_row, e_row, edge_row in self._get_sharded_stacked(
-                edge_repr, subbatch_size=subbatch_size
-        ):
-            for s_col, e_col, edge_col, in self._get_sharded_stacked(
-                    edge_repr, subbatch_size=subbatch_size
-            ):
-                yield (s_row, e_row, edge_row), (s_col, e_col, edge_col)
-
-    def _get_sharded_stacked(self, edge_repr, subbatch_size):
+    def _get_sharded_stacked(
+            self,
+            edge_repr: torch.Tensor,
+            subbatch_size: int
+    ):
         idx = 0
         start, end = 0, subbatch_size
         while start < edge_repr.shape[-2]:
@@ -603,7 +608,7 @@ class GeometricAttention(OFModule):
             idx += 1
             start, end = idx * subbatch_size, (idx + 1) * subbatch_size
 
-    def _get_gated(self, edge_repr, mask, fwd_cfg):
+    def _get_gated(self, edge_repr: torch.Tensor, mask: torch.Tensor, fwd_cfg):
         gated = torch.empty(
             *edge_repr.shape[:2],
             self.n_axis,
@@ -636,20 +641,28 @@ class GeometricAttention(OFModule):
 
         return gated.sum(-2)
 
-    def _get_sliced_weight(self, weight, shift=0):
+    def _get_sliced_weight(self, weight: torch.Tensor, shift=0):
         w = weight[..., :-self.d_edge].unflatten(-1, sizes=(4, -1))
         w = w[..., shift::2, :]
         w = w.flatten(start_dim=-2)
         return w
 
-    def _get_act_row(self, edge_row: torch.Tensor, mask: torch.Tensor):
+    def _get_act_row(
+            self,
+            edge_row: torch.Tensor,
+            mask: torch.Tensor
+    ) -> torch.Tensor:
         w = self._get_sliced_weight(self.act_w)
         b = self._get_sliced_weight(self.act_b)
         act = torch.einsum('...dr,drc->...rc', edge_row, w) + b
         act = self.glu(act) * mask[..., None, None, None]
         return act
 
-    def _get_act_col(self, edge_row: torch.Tensor, mask: torch.Tensor):
+    def _get_act_col(
+            self,
+            edge_row: torch.Tensor,
+            mask: torch.Tensor
+    ) -> torch.Tensor:
         w = self._get_sliced_weight(self.act_w, shift=1)
         b = self._get_sliced_weight(self.act_b, shift=1)
         act = torch.einsum('...dr,drc->...rc', edge_row, w) + b
@@ -664,31 +677,6 @@ class GeometricAttention(OFModule):
         out += self._get_gated(edge_repr, mask, fwd_cfg)
 
         return out
-
-
-class Val2ContBins(OFModule):
-    def __init__(self, cfg: argparse.Namespace, ):
-        super(Val2ContBins, self).__init__(cfg)
-
-        x_bin_size = (cfg.x_max - cfg.x_min) / (cfg.x_bins - 2)
-
-        self.register_buffer(
-            "x_offset", torch.linspace(
-                cfg.x_min - x_bin_size / 2,
-                cfg.x_max + x_bin_size / 2,
-                cfg.x_bins
-            ), persistent=False
-        )
-        self.coeff = -0.5 / ((x_bin_size * 0.2) ** 2)
-
-    def forward(self, dist_x):  # (*)
-        x_offset_shape = [1] * len(dist_x.size()) + [len(self.x_offset)]
-        x = dist_x.unsqueeze(-1) - self.x_offset.view(*x_offset_shape)
-        x_norm = self.coeff * torch.pow(x, 2)
-        x_norm = x_norm - x_norm.max(-1, keepdim=True)[0]
-        logits = torch.softmax(x_norm, dim=-1)
-
-        return logits
 
 
 # =============================================================================

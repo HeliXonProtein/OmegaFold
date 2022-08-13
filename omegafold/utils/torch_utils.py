@@ -15,7 +15,7 @@
 # limitations under the License.
 # =============================================================================
 """
-
+PyTorch utilities
 """
 # =============================================================================
 # Imports
@@ -40,10 +40,11 @@ def mask2bias(mask: torch.Tensor, *, inf: float = 1e9) -> torch.Tensor:
     """Convert mask to attention bias
 
     Args:
-        mask:
-        inf:
+        mask: the mask to convert to bias representation
+        inf: the floating point number to represent infinity
 
     Returns:
+        bias representation for masking in attention
 
     """
     return mask.float().sub(1).mul(inf)
@@ -60,9 +61,10 @@ def normalize(
     Args:
         inputs: the input tensor to be normalized
         normalized_shape: the normalized_shape for normalization
-        in_place:
+        in_place: if to perform the operations in-place
 
     Returns:
+        normalized tensor
 
     """
     if normalized_shape is None:
@@ -71,12 +73,13 @@ def normalize(
         normalized_shape = (normalized_shape,)
 
     if in_place:
+        # This seems to create small discrepancy in result
         dim = list(range(len(inputs.shape))[-len(normalized_shape):])
         inputs -= inputs.mean(dim=dim, keepdim=True)
         inputs *= torch.rsqrt(inputs.var(dim=dim, keepdim=True) + 1e-5)
         return inputs
-    # F.layer_norm seems a bit faster
     else:
+        # F.layer_norm seems a bit faster
         return F.layer_norm(inputs, normalized_shape, None, None, 1e-5)
 
 
@@ -87,7 +90,7 @@ def masked_mean(
         keepdim: typing.Optional[bool] = False,
         eps: typing.Optional[float] = 4e-5
 ) -> torch.Tensor:
-    """
+    """Mean operation with mask
 
     Args:
         values: the values to take the mean for
