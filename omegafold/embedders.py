@@ -126,14 +126,16 @@ class EdgeEmbedder(modules.OFModule):
         self.proj_j = nn.Embedding(cfg.alphabet_size, cfg.edge_dim)
         self.relpos = RelPosEmbedder(cfg.relpos_len * 2 + 1, cfg.edge_dim)
 
-    def forward(self, fasta_sequence: torch.Tensor) -> torch.Tensor:
-        i = self.proj_i(fasta_sequence).unsqueeze(-2)
-        j = self.proj_j(fasta_sequence).unsqueeze(-3)
-        edge_repr = i + j
-        rel_pos = self.relpos(fasta_sequence.size(-1))
-        edge_repr += rel_pos
+    def forward(
+            self,
+            fasta_sequence: torch.Tensor,
+            out: torch.Tensor
+    ) -> torch.Tensor:
+        out += self.proj_i(fasta_sequence).unsqueeze(-2)
+        out += self.proj_j(fasta_sequence).unsqueeze(-3)
+        out += self.relpos(fasta_sequence.size(-1))
 
-        return edge_repr
+        return out
 
 
 class RoPE(nn.Module):
@@ -241,9 +243,11 @@ class RecycleEmbedder(modules.OFModule):
             fasta: torch.Tensor,
             prev_node: torch.Tensor,
             prev_edge: torch.Tensor,
-            prev_x: torch.Tensor
+            prev_x: torch.Tensor,
+            node_repr: torch.Tensor,
+            edge_repr: torch.Tensor,
     ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
-        """
+        """Recycle the last run
 
         Args:
             fasta:
@@ -253,16 +257,18 @@ class RecycleEmbedder(modules.OFModule):
                 of shape [num_res, num_res, edge_repr_dim]
             prev_x: pseudo beta coordinates from the previous cycle.
                 of shape [num_res, 3]
+            node_repr: the node representation to put stuff in
+            edge_repr: the edge representation to put stuff in
 
         Returns:
 
         """
-        atom_mask = rc.restype2atom_mask[fasta.cpu()].to(self.device)
+        atom_mask = rc.restype2atom_mask[fasta].to(self.device)
         prev_beta = utils.create_pseudo_beta(prev_x, atom_mask)
         d = utils.get_norm(prev_beta.unsqueeze(-2) - prev_beta.unsqueeze(-3))
         d = self.dgram(d)
-        edge_repr = self.prev_pos_embed(d)
-        node_repr = self.layernorm_node(prev_node)
+        node_repr[..., 0, :, :] += self.layernorm_node(prev_node)
+        edge_repr += self.prev_pos_embed(d)
         edge_repr += self.layernorm_edge(prev_edge)
 
         return node_repr, edge_repr

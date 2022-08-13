@@ -106,7 +106,10 @@ class GatedAttentionUnit(modules.OFModule):
             scale=scaling,
             value=values,
             bias=bias + self.relpos(base.shape[-2])[..., 0],
-            subbatch_size=fwd_cfg.subbatch_size
+            subbatch_size=fwd_cfg.subbatch_size,
+            return_edge=True,
+            edge_reduction='sum',
+            edge_reduction_dim=-3,
         )
 
         # unflatten the values, base will be unflattened in self._forward
@@ -201,18 +204,20 @@ class OmegaPLM(modules.OFModule):
         bias = utils.mask2bias(mask[..., None, :])
 
         node = self.input_embedding(tokens)
-        node = self._get_finetuning_scale(mask, tokens) * node
-        edges = list()
-        for layer in self.layers:
-            node, edge = layer(node, qk_scaling, bias, fwd_cfg)
-            edges.append(edge)
+        node *= self._get_finetuning_scale(mask, tokens)
+        edges = torch.empty(
+            len(self.layers), mask.shape[-1], mask.shape[-1],
+            dtype=node.dtype, device=node.device
+        )
+        for i, layer in enumerate(self.layers):
+            node, edges[i] = layer(node, qk_scaling, bias, fwd_cfg)
         node = self.output_norm(node)
 
         # Taking the average
-        edges = torch.stack(edges, dim=0)
-        edges = edges.sum(-3) / (mask.any(-1).sum() + 1e-5)
+        edges /= (mask.any(-1).sum() + 1e-5)
 
         return node, edges
+
 
     def _get_finetuning_scale(
             self, mask: torch.Tensor, tokens: torch.Tensor

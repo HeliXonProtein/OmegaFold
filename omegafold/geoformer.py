@@ -105,25 +105,36 @@ class GeoFormerBlock(modules.OFModule):
         Returns:
 
         """
-        node_repr += self.attention_w_edge_bias(node_repr, edge_repr, mask)
-        node_col = utils.normalize(node_repr.transpose(-2, -3).contiguous())
-        node_col, _ = self.column_attention(
-            node_col,
-            node_col,
-            bias=utils.mask2bias(mask.T[..., None, None, :])
+        node_repr += self.attention_w_edge_bias(
+            node_repr,
+            edge_repr,
+            mask,
+            fwd_cfg=fwd_cfg
         )
-        node_repr += node_col.transpose(-2, -3)
+        node_repr = self._column_attention(node_repr, mask, fwd_cfg=fwd_cfg)
         node_repr += self.node_transition(
-            node_repr, subbatch_size=fwd_cfg.subbatch_size
+            node_repr,
+            subbatch_size=fwd_cfg.subbatch_size
         )
 
         edge_repr += self.out_product(node_repr, mask)
         for layer in self.geometric_attention:
-            edge_repr += layer(edge_repr, mask[..., 0, :])
+            edge_repr += layer(edge_repr, mask[..., 0, :], fwd_cfg=fwd_cfg)
 
         edge_repr += self.edge_transition(edge_repr, fwd_cfg.subbatch_size)
 
         return node_repr, edge_repr
+
+    def _column_attention(self, node_repr, mask, fwd_cfg):
+        node_repr_col = utils.normalize(node_repr.transpose(-2, -3))
+        node_repr_col = self.column_attention(
+            node_repr_col,
+            node_repr_col,
+            bias=utils.mask2bias(mask.T[..., None, None, :]),
+            fwd_cfg=fwd_cfg
+        )
+        node_repr += node_repr_col.transpose(-2, -3)
+        return node_repr
 
 
 class GeoFormer(modules.OFModule):
