@@ -14,6 +14,8 @@ We have optimized (to some extent) the GRAM usage of OmegaFold model in our
 latest release. Now the model can inference protein sequence as long as
 _4096_ on NVIDIA A100 Graphics card with 80 GB of memory with
 `--subbatch_size` set to 448 without hitting 70 GB of memory.
+You could also inference a 4096-long sequence with `--subbatch_size` set to 
+1 on a 24 GB GPU (but might take _a while_).
 This version's model is more sensitive to `--subbatch_size`.
 
 ### Setting Subbatch
