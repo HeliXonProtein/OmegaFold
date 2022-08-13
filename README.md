@@ -16,6 +16,24 @@ _4096_ on NVIDIA A100 Graphics card with 80 GB of memory with
 `--subbatch_size` set to 128 without hitting 70 GB of memory.
 This version's model is more sensitive to `--subbatch_size`.
 
+### Setting Subbatch
+
+Subbatch makes a trade-off between time and space.
+One can greatly reduce the space requirements by setting `--subbatch_size`
+very low.
+The default is the number of residues in the sequence and the lowest
+possible number is 1.
+For now we do not have a rule of thumb for setting the `--subbatch_size`,
+but we suggest half the value if you run into GPU memory limitations.
+
+### MacOS Users
+
+For macOS users, we support MPS (Apple Silicon) acceleration if the user 
+installs the latest nightly version of PyTorch.
+Also, current code also requires macOS users need to `git clone` the 
+repository and use `python main.
+py` (see below) to run the model.
+
 ## Setup
 
 To prepare the environment to run OmegaFold,
@@ -55,12 +73,14 @@ omegafold INPUT_FILE.fasta OUTPUT_DIRECTORY
 
 And voila!
 
-### Alternatively
+### Alternatively (Or MacOS users)
 
 Even if this failed, since we use minimal 3rd party libraries, you can
 always just install the latest
 [PyTorch](https://pytorch.org) and [biopython](https://biopython.org)
 (and that's it!) yourself.
+For mps accelerator, macOS users may need to install the lastest nightly
+version of PyTorch.
 In this case, you could run
 
 ```commandline
