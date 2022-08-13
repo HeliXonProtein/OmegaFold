@@ -633,7 +633,7 @@ class GeometricAttention(OFModule):
             ):
                 act_col = self._get_act_col(edge_col, mask[s_col:e_col])
                 ab = torch.einsum('...ikrd,...jkrd->...ijrd', act_row, act_col)
-                ab = utils.normalize(ab)
+                ab = utils.normalize(ab.contiguous())
                 gated[s_row:e_row, s_col:e_col] = torch.einsum(
                     '...rd,rdc->...rc', ab, self.out_proj_w
                 )
