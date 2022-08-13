@@ -13,7 +13,7 @@ releasing possibly stronger models.
 We have optimized (to some extent) the GRAM usage of OmegaFold model in our
 latest release. Now the model can inference protein sequence as long as
 _4096_ on NVIDIA A100 Graphics card with 80 GB of memory with
-`--subbatch_size` set to 128 without hitting 70 GB of memory.
+`--subbatch_size` set to 448 without hitting full memory.
 This version's model is more sensitive to `--subbatch_size`.
 
 ### Setting Subbatch
@@ -28,9 +28,9 @@ but we suggest half the value if you run into GPU memory limitations.
 
 ### MacOS Users
 
-For macOS users, we support MPS (Apple Silicon) acceleration if the user 
+For macOS users, we support MPS (Apple Silicon) acceleration if the user
 installs the latest nightly version of PyTorch.
-Also, current code also requires macOS users need to `git clone` the 
+Also, current code also requires macOS users need to `git clone` the
 repository and use `python main.
 py` (see below) to run the model.
 
