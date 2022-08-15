@@ -397,7 +397,10 @@ def get_args() -> typing.Tuple[
         '--allow_tf32', default=True, type=hipify_python.str2bool,
         help='if allow tf32 for speed if available, default to True'
     )
-    parser.add_argument()
+    parser.add_argument(
+        '--offset_rope', default=False, type=hipify_python.str2bool,
+        help='offset RoPE sin/cos positional embedding given residue_index/chainbreaks'
+    )
 
     args = parser.parse_args()
     _set_precision(args.allow_tf32)
