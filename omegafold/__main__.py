@@ -44,7 +44,9 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     # get the model
     logging.info(f"Constructing OmegaFold")
-    model = of.OmegaFold(of.make_config())
+    cfg = of.make_config()
+    cfg.plm.offset_rope = bool(args.offset_rope)
+    model = of.OmegaFold(cfg)
     if state_dict is None:
         logging.warning("Inferencing without loading weight")
     else:

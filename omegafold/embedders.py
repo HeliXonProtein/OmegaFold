@@ -139,7 +139,8 @@ class RoPE(nn.Module):
             self,
             tensor: torch.Tensor,
             seq_dim: typing.Union[int, tuple],
-            residue_index: torch.Tensor
+            residue_index: torch.Tensor,
+            offset_rope=False
     ) -> torch.Tensor:
         """
 
@@ -152,32 +153,17 @@ class RoPE(nn.Module):
         """
         if isinstance(seq_dim, int):
             seq_dim = [seq_dim, ]
-        sin, cos = self._compute_sin_cos(tensor, seq_dim, residue_index=residue_index)
 
-        return _apply_embed(tensor, sin, cos, seq_dim)
-
-    def _compute_sin_cos(
-            self,
-            tensor: torch.Tensor,
-            seq_dim: typing.Tuple[int],
-            residue_index: torch.Tensor
-    ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
-        """Compute sine and cosine tensors
-
-        Args:
-            tensor: the tensors to apply RoPE to
-            seq_dim: the dimension indices of the spatial dimensions
-
-        Returns:
-            A tuple of tensors where the first one is the sine tensor
-                and the second one is the cosine tensor
-
-        """
-        position = residue_index
+        if offset_rope:
+            position = residue_index
+        else:
+            position = torch.arange(residue_index.shape[0],
+                dtype=tensor.dtype,
+                device=tensor.device)
         sinusoid = torch.einsum("..., d->...d", position, self.inv_freq)
         sin, cos = torch.sin(sinusoid), torch.cos(sinusoid)
-        return sin, cos
 
+        return _apply_embed(tensor, sin, cos, seq_dim)
 
 class RelPosEmbedder(nn.Embedding):
     """

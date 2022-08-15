@@ -68,7 +68,7 @@ class GatedAttentionUnit(modules.OFModule):
         self.multi_headed_scaling = modules.MultiHeadedScaling(
             cfg.attn_dim,
             num_heads=2,
-            on_out_ready=lambda x,y: self.rope(x, x.ndim - 3, residue_index=y)
+            on_out_ready=lambda x,y: self.rope(x, x.ndim - 3, y, cfg.offset_rope)
         )
         self.rope = embedders.RoPE(cfg.attn_dim)
         self.relpos = embedders.RelPosEmbedder(cfg.num_relpos, embedding_dim=1)
