@@ -43,7 +43,7 @@ from omegafold.utils.protein_utils import residue_constants as rc
 
 try:
     from torch.backends import mps  # Compatibility with earlier versions
-except IndexError:
+except ImportError:
     mps = None
 
 
