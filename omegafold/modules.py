@@ -254,7 +254,7 @@ class MultiHeadedScaling(OFModule):
 
         self.reset_parameters()
 
-    def forward(self, x: torch.Tensor) -> typing.List[torch.Tensor]:
+    def forward(self, x: torch.Tensor, residue_index: torch.Tensor) -> typing.List[torch.Tensor]:
         """
         Element wise multiplication followed by addition
 
@@ -269,7 +269,7 @@ class MultiHeadedScaling(OFModule):
         x = x.unsqueeze(self.unsqueeze_dim) * self.weight + self.bias
         positive_index = x.ndim + self.unsqueeze_dim
         if self.call_on_out_ready is not None:
-            x = self.call_on_out_ready(x)
+            x = self.call_on_out_ready(x, residue_index)
 
         x = x.split(self.split_dims, dim=positive_index)
 

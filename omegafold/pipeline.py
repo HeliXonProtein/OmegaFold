@@ -145,8 +145,24 @@ def fasta2inputs(
         # os.pathconf is UNIX specific. Set to 32 for now.
         name_max = 32
 
+    def chain_break(lengths, offset=200):
+        '''Minkyung: add big enough number to residue index to indicate chain breaks'''
+        residue_index = torch.arange(sum(lengths))
+        L_prev = 0
+        for L_i in lengths[:-1]:
+            residue_index[L_prev+L_i:] += offset
+            L_prev += L_i      
+        return residue_index
+
     for i, (ch, fas) in enumerate(combined):
         fas = fas.replace("Z", "E").replace("B", "D").replace("U", "C")
+
+        # define residue index
+        fas = fas.replace("/",":")
+        lengths = [len(a) for a in fas.split(":")]
+        residue_index = chain_break(lengths)
+        fas = fas.replace(":","")
+
         aatype = torch.LongTensor(
             [rc.restypes_with_x.index(aa) if aa != '-' else 21 for aa in fas]
         )
@@ -174,7 +190,7 @@ def fasta2inputs(
             p_msa_mask = torch.cat((mask[None, :], p_msa_mask), dim=0)
             p_msa = torch.cat((aatype[None, :], p_msa), dim=0)
             p_msa[~p_msa_mask.bool()] = 21
-            data.append({"p_msa": p_msa, "p_msa_mask": p_msa_mask})
+            data.append({"p_msa": p_msa, "p_msa_mask": p_msa_mask, "residue_index":residue_index})
 
         yield utils.recursive_to(data, device=device), out_fname
 
@@ -382,6 +398,10 @@ def get_args() -> typing.Tuple[
     parser.add_argument(
         '--allow_tf32', default=True, type=hipify_python.str2bool,
         help='if allow tf32 for speed if available, default to True'
+    )
+    parser.add_argument(
+        '--offset_rope', default=False, type=hipify_python.str2bool,
+        help='offset RoPE sin/cos positional embedding given residue_index/chainbreaks'
     )
 
     args = parser.parse_args()

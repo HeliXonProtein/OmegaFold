@@ -53,6 +53,7 @@ def make_config() -> argparse.Namespace:
             num_head=1,
             num_relpos=129,
             masked_ratio=0.12,
+            offset_rope=False,
         ),
         node_dim=256,
         edge_dim=128,
