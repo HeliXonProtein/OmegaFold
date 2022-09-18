@@ -43,8 +43,10 @@ from omegafold.utils.protein_utils import residue_constants as rc
 
 try:
     from torch.backends import mps  # Compatibility with earlier versions
+    _mps_is_available = mps.is_available
 except ImportError:
-    mps = None
+    def _mps_is_available():
+        return False
 
 
 # =============================================================================
@@ -277,7 +279,7 @@ def _get_device(device) -> str:
     if device is None:
         if torch.cuda.is_available():
             return "cuda"
-        elif mps.is_available():
+        elif _mps_is_available():
             return "mps"
         else:
             return 'cpu'
@@ -289,7 +291,7 @@ def _get_device(device) -> str:
         else:
             raise ValueError(f"Device cuda is not available")
     elif device == "mps":
-        if mps.is_available():
+        if _mps_is_available():
             return device
         else:
             raise ValueError(f"Device mps is not available")
