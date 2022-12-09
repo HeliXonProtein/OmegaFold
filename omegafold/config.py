@@ -40,7 +40,9 @@ def _make_config(input_dict: dict) -> argparse.Namespace:
     return argparse.Namespace(**new_dict)
 
 
-def make_config() -> argparse.Namespace:
+def make_config(model_idx: int = 1) -> argparse.Namespace:
+    if model_idx not in [1, 2]:
+        raise ValueError("model_idx must be 1 or 2")
     cfg = dict(
         alphabet_size=21,
         plm=dict(
@@ -62,6 +64,21 @@ def make_config() -> argparse.Namespace:
             last_break=20.75,
             num_bins=16,
             ignore_index=0,
+        ),
+        rough_dist_bin=dict(
+            x_min=3.25,
+            x_max=20.75,
+            x_bins=16,
+        ),
+        dist_bin=dict(
+            x_bins=64,
+            x_min=2,
+            x_max=65,
+        ),
+        pos_bin=dict(
+            x_bins=64,
+            x_min=-32,
+            x_max=32,
         ),
         c=16,
         geo_num_blocks=50,
@@ -90,6 +107,7 @@ def make_config() -> argparse.Namespace:
             num_bins=50,
         )
     )
+    cfg["struct_embedder"] = model_idx == 2
     return _make_config(cfg)
 
 

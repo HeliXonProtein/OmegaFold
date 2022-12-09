@@ -16,10 +16,9 @@
 # limitations under the License.
 # =============================================================================
 """Constants used in OmegaFold."""
-
 # Internal import (35fd).
 # Distance from one CA to next CA [trans configuration: omega = 180].
-import Bio.Data.SCOPData
+from Bio.Data import PDBData
 import Bio.PDB
 import torch
 
@@ -684,7 +683,7 @@ def substitute(res: str):
         if res in resnames:
             return res
         else:
-            res = Bio.Data.SCOPData.protein_letters_3to1[res]
+            res = PDBData.protein_letters_3to1[res]
             if res in restype_1to3.keys():
                 return restype_1to3[res]
             elif res == "X":

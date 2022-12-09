@@ -782,7 +782,7 @@ class AAFrame(object):
 
         # make extra backbone frames
         # This follows the order of ~restypes
-        m = rc.restype_aa_default_frame[fasta.cpu()].to(self.device)
+        m = rc.restype_aa_default_frame.to(self.device)[fasta]
         default_frames = AAFrame.from_4x4(
             m, torsion_angles_mask, unit="Angstrom"
         )
