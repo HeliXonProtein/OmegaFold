@@ -35,6 +35,7 @@ from omegafold import (
     omegaplm,
     utils,
 )
+from omegafold.utils import residue_constants as rc
 
 
 # =============================================================================
@@ -106,6 +107,7 @@ class OmegaFoldCycle(modules.OFModule):
             'prev_node': prev_node[..., 0, :, :],
             'prev_edge': edge_repr,
             'prev_x': ret['final_atom_positions'],
+            'prev_frames': ret['final_frames'],
         }
         return ret, prev_dict
 
@@ -155,6 +157,9 @@ class OmegaFold(modules.OFModule):
         final_result = None
 
         # Start cycling
+        residx_atom14_mask = rc.restype_atom14_mask.to(
+            device=primary_sequence.device
+        )[primary_sequence]
         for cycle_data in inputs:
             p_msa, p_msa_mask = cycle_data['p_msa'], cycle_data['p_msa_mask']
             fasta, mask = p_msa[..., 0, :], p_msa_mask[..., 0, :]
@@ -170,6 +175,8 @@ class OmegaFold(modules.OFModule):
                 prev_x=prev_dict.pop('prev_x'),
                 node_repr=node_repr,
                 edge_repr=edge_repr,
+                atom14_mask=residx_atom14_mask,
+                prev_frames=prev_dict.pop('prev_frames')
             )
 
             result, prev_dict = self.omega_fold_cycle(
@@ -238,11 +245,6 @@ class OmegaFold(modules.OFModule):
         Returns:
 
         """
-        prev_x = torch.zeros(
-            [num_res, 14, 3],
-            device=self.device, dtype=torch.float
-        )
-
         return {
             "prev_node": torch.zeros(
                 [num_res, self.cfg.node_dim],
@@ -252,7 +254,13 @@ class OmegaFold(modules.OFModule):
                 [num_res, num_res, self.cfg.edge_dim],
                 device=self.device, dtype=torch.float
             ),
-            "prev_x": prev_x,
+            "prev_x": torch.zeros(
+                [num_res, 14, 3],
+                device=self.device, dtype=torch.float
+            ),
+            "prev_frames": utils.AAFrame.default_init(
+                num_res, 8, unit="Angstrom", device=self.device
+            )
         }
 
 

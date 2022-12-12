@@ -222,6 +222,128 @@ class RelPosEmbedder(nn.Embedding):
         return super(RelPosEmbedder, self).forward(idx)  # [num_res, dim]
 
 
+class StructEmbedder(modules.OFModule):
+    """
+    Encoder for pair wise atom distance without distance clamp
+    but a sublinear-function with ord encoder.
+    """
+
+    def __init__(self, cfg: argparse.Namespace):
+        super(StructEmbedder, self).__init__(cfg)
+        self.rough_dist_bin = modules.Val2ContBins(cfg.rough_dist_bin)
+        self.dist_bin = modules.Val2ContBins(cfg.dist_bin)
+        self.pos_bin = modules.Val2ContBins(cfg.pos_bin)
+
+        self.aa_embedding = nn.Embedding(21 * 21, embedding_dim=cfg.c)
+
+        frame_num = 8
+        atom_num = 14
+
+        self.dist_bin_embedding = nn.Linear(
+            cfg.dist_bin.x_bins, cfg.c
+        )
+        self.rough_dist_bin_embedding = nn.Linear(
+            cfg.rough_dist_bin.x_bins, cfg.c
+        )
+
+        self.dist_bin_linear = nn.Linear(
+            atom_num * atom_num * cfg.c, cfg.c
+        )
+        self.rough_dist_bin_linear = nn.Linear(
+            atom_num * atom_num * cfg.c, cfg.c
+        )
+
+        self.pos_bin_embedding = nn.Linear(
+            cfg.pos_bin.x_bins, cfg.c
+        )
+        self.pos_linear = nn.Linear(
+            frame_num * atom_num * 3 * cfg.c, cfg.c
+        )
+
+        self.linear_z_weights = nn.Parameter(
+            torch.zeros([cfg.c, cfg.c, cfg.edge_dim])
+        )
+        self.linear_z_bias = nn.Parameter(torch.zeros([cfg.edge_dim]))
+
+    def forward(
+            self,
+            fasta1: torch.Tensor,
+            fasta2: torch.Tensor,
+            pos14_a: torch.Tensor,
+            mask14_a: torch.Tensor,
+            pos14_b: torch.Tensor,
+            mask14_b: torch.Tensor,
+            frame8: utils.AAFrame,
+    ):
+        pairwise_fasta = fasta1.unsqueeze(-1) * 21 + fasta2.unsqueeze(-2)
+        d = torch.norm(
+            pos14_b[None, :, None] - pos14_a[:, None, :, None],
+            p=2, dim=-1, keepdim=False
+        )
+        d_mask = mask14_b[None, :, None] * mask14_a[:, None, :, None]
+        d_mask = d_mask.unsqueeze(-1)
+        local_mask = torch.mul(
+            mask14_b[None, :, None], frame8.mask[:, None, :, None]
+        )
+        local_mask = local_mask.unsqueeze(-1)
+
+        local_vec = frame8.unsqueeze(1).unsqueeze(-1).position_in_frame(
+            pos14_b[None, :, None, :]
+        )
+
+        return self._sharded_compute(
+            pairwise_fasta, d, local_vec, d_mask, local_mask
+        )
+
+    def _sharded_compute(
+            self,
+            pairwise_fasta: torch.Tensor,
+            d: torch.Tensor,
+            local_vec: torch.Tensor,
+            d_mask: torch.Tensor,
+            local_mask: torch.Tensor
+    ) -> torch.Tensor:
+        pairwise_fasta = self.aa_embedding(pairwise_fasta)
+        d1 = self.rough_dist_bin(d)
+        d2 = self.dist_bin(d)
+        d3 = self.pos_bin(local_vec)
+
+        d1 = self.rough_dist_bin_embedding(d1)
+        d1 = d1 * d_mask
+        d1 = self.rough_dist_bin_linear(d1.flatten(start_dim=-3))
+
+        d2 = self.dist_bin_embedding(d2)
+        d2 = d2 * d_mask
+        d2 = self.dist_bin_linear(d2.flatten(start_dim=-3))
+
+        d3 = self.pos_bin_embedding(d3)
+        d3 = d3 * (local_mask.unsqueeze(-1))
+        d3 = self.pos_linear(d3.flatten(start_dim=-4))
+
+        final_d = d1 + d2 + d3  # + d4
+        O = torch.einsum('...sdi,...sdj->...sdij', pairwise_fasta, final_d)
+        Z = torch.einsum(
+            '...sdij,ijh->...sdh', O, self.linear_z_weights
+        ) + self.linear_z_bias
+        return Z
+
+
+class PairStructEmbedder(StructEmbedder):
+    def forward(
+            self,
+            fasta: torch.Tensor,
+            pos14: torch.Tensor,
+            pos14_mask: torch.Tensor,
+            frame8: utils.AAFrame,
+    ):
+        return super(PairStructEmbedder, self).forward(
+            fasta1=fasta, fasta2=fasta,
+            pos14_a=pos14, pos14_b=pos14,
+            mask14_a=pos14_mask, mask14_b=pos14_mask,
+            frame8=frame8
+        )
+
+
 class RecycleEmbedder(modules.OFModule):
     """
     The recycle embedder from Jumper et al. (2021)
@@ -237,6 +359,8 @@ class RecycleEmbedder(modules.OFModule):
         self.prev_pos_embed = nn.Embedding(
             cfg.prev_pos.num_bins, cfg.edge_dim,
         )
+        if cfg.struct_embedder:
+            self.embed_struct = PairStructEmbedder(cfg)
 
     def forward(
             self,
@@ -246,6 +370,8 @@ class RecycleEmbedder(modules.OFModule):
             prev_x: torch.Tensor,
             node_repr: torch.Tensor,
             edge_repr: torch.Tensor,
+            atom14_mask: torch.Tensor,
+            prev_frames: utils.AAFrame,
     ) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         """Recycle the last run
 
@@ -259,17 +385,25 @@ class RecycleEmbedder(modules.OFModule):
                 of shape [num_res, 3]
             node_repr: the node representation to put stuff in
             edge_repr: the edge representation to put stuff in
+            atom14_mask: the mask for the 14 atoms
+            prev_frames: the frames from the previous cycle
 
         Returns:
 
         """
-        atom_mask = rc.restype2atom_mask[fasta.cpu()].to(self.device)
+        atom_mask = rc.restype2atom_mask.to(self.device)[fasta]
         prev_beta = utils.create_pseudo_beta(prev_x, atom_mask)
         d = utils.get_norm(prev_beta.unsqueeze(-2) - prev_beta.unsqueeze(-3))
         d = self.dgram(d)
-        node_repr[..., 0, :, :] += self.layernorm_node(prev_node)
+        node_repr[..., 0, :, :] = (
+                node_repr[..., 0, :, :] + self.layernorm_node(prev_node)
+        )
         edge_repr += self.prev_pos_embed(d)
         edge_repr += self.layernorm_edge(prev_edge)
+        if self.cfg.struct_embedder:
+            edge_repr += self.embed_struct(
+                fasta, prev_x, atom14_mask, prev_frames
+            )
 
         return node_repr, edge_repr
 

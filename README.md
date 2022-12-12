@@ -10,6 +10,12 @@ releasing possibly stronger models.
 
 ## Update Notes
 
+### Model 2 release notes Dec 9. 2022
+
+Now you can use model 2 by setting `--model 2` in the command line!
+
+### Huge GRAM reduction
+
 We have optimized (to some extent) the GRAM usage of OmegaFold model in our
 latest release. Now the model can inference protein sequence as long as
 _4096_ on NVIDIA A100 Graphics card with 80 GB of memory with

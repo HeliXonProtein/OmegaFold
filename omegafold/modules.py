@@ -280,6 +280,32 @@ class MultiHeadedScaling(OFModule):
         nn.init.zeros_(self.bias)
 
 
+class Val2ContBins(OFModule):
+    def __init__(self, cfg: argparse.Namespace, ):
+        super(Val2ContBins, self).__init__(cfg)
+
+        x_bin_size = (cfg.x_max - cfg.x_min) / (cfg.x_bins - 2)
+
+        self.register_buffer(
+            "x_offset", torch.linspace(
+                cfg.x_min - x_bin_size / 2,
+                cfg.x_max + x_bin_size / 2,
+                cfg.x_bins
+            ), persistent=False
+        )
+        self.coeff = -0.5 / ((x_bin_size * 0.2) ** 2)
+        # `*0.5`: makes it not too blurred
+
+    def forward(self, dist_x):  # (*)
+        x_offset_shape = [1] * len(dist_x.size()) + [len(self.x_offset)]
+        x = dist_x.unsqueeze(-1) - self.x_offset.view(*x_offset_shape)
+        x_norm = self.coeff * torch.pow(x, 2)
+        x_norm = x_norm - x_norm.max(-1, keepdim=True)[0]
+        logits = torch.softmax(x_norm, dim=-1)
+
+        return logits
+
+
 class Val2Bins(OFModule):
     """
     Convert continuous values to bins
